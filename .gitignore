@@ -63,3 +63,18 @@ pull.json
 setup_remote.sh
 tmp_hailo_whisper/
 whisper.cpp/build/
+
+# --- Stan's additions ---
+# whisper.cpp is cloned separately by install.sh — ignore the whole tree
+whisper.cpp/
+
+# Ad-hoc backup files made during debugging
+*.bak
+*.bak2
+*.working
+
+# Memory backups (kept locally for reference, not committed)
+*.old
+
+# Runtime UI state (volume slider etc.)
+settings.json
