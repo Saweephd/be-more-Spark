@@ -79,7 +79,7 @@ WHISPER_MODEL = os.path.join(_PROJECT_ROOT, "models", "ggml-base.en.bin")
 
 MIC_SAMPLE_RATE = 48000
 WAKE_WORD_MODEL = os.path.join(_PROJECT_ROOT, "wakeword.onnx")
-WAKE_WORD_THRESHOLD = 0.35
+WAKE_WORD_THRESHOLD = 0.25
 
 # Robustly find Audio Devices
 def find_audio_devices():
