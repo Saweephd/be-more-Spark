@@ -447,7 +447,9 @@ class Brain:
                 "temperature": 0.7,
                 "num_predict": 1024,  # increased to prevent responses getting cut off
                 "num_ctx": 4096,
-            }
+            },
+            "think": "low",  # gpt-oss reasoning effort: cuts thinking-mode preamble
+
         }
 
         assistant_appended = False
@@ -668,7 +670,8 @@ class Brain:
                 "temperature": 0.7,
                 "num_predict": 1024,  # Increased to prevent responses getting cut off
                 "num_ctx": 4096,      # Ensure context window is large enough
-            }
+            },
+            "think": "low",  # gpt-oss reasoning effort
         }
 
         full_content = ""

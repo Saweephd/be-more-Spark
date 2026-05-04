@@ -13,9 +13,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # LLM Settings
 # To offload to your Linux server, change this to: "http://blackbox.clevercode.ts.net:11434/api/chat"
 # Make sure Ollama is running on the blackbox server and listening on 0.0.0.0
-LLM_URL = "http://127.0.0.1:8000/api/chat"
-LLM_MODEL = "qwen2.5-instruct:1.5b" # Native Hailo model for all queries
-FAST_LLM_MODEL = "qwen2.5-instruct:1.5b" # Unify models to prevent NPU swap crashing
+LLM_URL = "http://192.168.1.2:11434/api/chat"
+LLM_MODEL = "gpt-oss:20b" # GPU-accelerated chat brain on DGX Spark 1
+FAST_LLM_MODEL = "gpt-oss:20b" # Same model, no routing tier needed
 VISION_MODEL = "qwen2-vl-instruct:2b" # Legacy Ollama name (unused — VLM runs via HailoRT directly)
 
 # VLM (Vision Language Model) Settings — uses HailoRT Python API directly
