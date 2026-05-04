@@ -1122,7 +1122,7 @@ class BotGUI:
                 pass
             if drain:
                 try:
-                    self._tts_aplay.wait(timeout=2.0)
+                    self._tts_aplay.wait(timeout=10.0)
                 except subprocess.TimeoutExpired:
                     try:
                         self._tts_aplay.terminate()
