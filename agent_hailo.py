@@ -992,7 +992,7 @@ class BotGUI:
                      "-t", "raw", "-q", "--buffer-time=500000"]
         for attempt in range(10):
             try:
-                self._tts_aplay = subprocess.Popen(aplay_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                self._tts_aplay = subprocess.Popen(aplay_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
                 time.sleep(0.05)
                 if self._tts_aplay.poll() is not None:
                     _, err = self._tts_aplay.communicate()
