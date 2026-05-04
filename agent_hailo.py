@@ -1074,7 +1074,7 @@ class BotGUI:
 
     def _write_to_piper(self, text):
         """Write one line of cleaned text to the persistent Piper process."""
-        if self._piper_proc is None or self._piper_proc.poll() is not None:
+        if self._piper_proc is None or self._piper_proc.poll() is not None or self._tts_aplay is None:
             return
         try:
             self._piper_proc.stdin.write((text + "\n").encode("utf-8"))
@@ -1214,7 +1214,7 @@ class BotGUI:
             try:
                 if not self.is_muted:
                     # Lazily start the pipeline on the first sentence of a turn
-                    if self._piper_proc is None or self._piper_proc.poll() is not None:
+                    if self._piper_proc is None or self._piper_proc.poll() is not None or self._tts_aplay is None:
                         self._start_tts_turn()
                         if self._piper_proc is None:
                             # Failed to start — skip audio, still transition state
