@@ -2,9 +2,9 @@
 Type=Application
 Name=BMO Agent
 Comment=Be More Agent — Local AI Robot
-Exec=/home/clevercode/be-more-agent/start_agent.sh
-Icon=/home/clevercode/be-more-agent/static/bmo_stylized_icon.png
+Exec=/home/saweephd/be-more-agent/start_agent.sh
+Icon=/home/saweephd/be-more-agent/static/bmo_stylized_icon.png
 Terminal=false
 Categories=Utility;Application;
 StartupNotify=true
-Path=/home/clevercode/be-more-agent
+Path=/home/saweephd/be-more-agent
