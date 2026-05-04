@@ -734,10 +734,11 @@ class BotGUI:
         silent_chunks = 0
         has_spoken = False
         total_samples = 0
+        loud_chunks_seen = 0
         MAX_SAMPLES = MIC_SAMPLE_RATE * 15  # 15-second hard cap
 
         def callback(indata, frames_count, time, status):
-            nonlocal silent_chunks, has_spoken, total_samples
+            nonlocal silent_chunks, has_spoken, total_samples, loud_chunks_seen
             vol = np.linalg.norm(indata)
             # Update mouth_open for real-time lip sync during recording (listening mode)
             if self.current_state == BotStates.LISTENING:
@@ -745,11 +746,18 @@ class BotGUI:
 
             frames.append(indata.copy())
             total_samples += indata.shape[0]
-            if vol < 500: # Silence threshold
+            if vol < 4000:  # Silence threshold
                 silent_chunks += 1
+                # has_spoken stays whatever it was — silence doesn't change it
             else:
                 silent_chunks = 0
-                has_spoken = True
+                # Require 5 confirmed loud chunks (~25ms) before declaring speech started.
+                # This prevents wake-word tail or transient noise from prematurely
+                # triggering has_spoken=True (which would let silent_chunks > 30
+                # bail us before the user actually speaks their prompt).
+                loud_chunks_seen += 1
+                if loud_chunks_seen >= 5:
+                    has_spoken = True
 
         retry_count = 0
         while retry_count < 3:
@@ -759,8 +767,8 @@ class BotGUI:
                     last_callback_at = time.time()
                     while not self.stop_event.is_set():
                         sd.sleep(50)
-                        if not has_spoken and silent_chunks > 100: break
-                        if has_spoken and silent_chunks > 40: break
+                        if not has_spoken and silent_chunks > 60: break  # 3s of silence (was 5s)
+                        if has_spoken and silent_chunks > 30: break  # 1.5s after speech (was 2s)
                         if total_samples >= MAX_SAMPLES: break  # 15-second hard cap (sample-accurate)
                         # Watchdog: if the callback stops firing mid-recording
                         # (USB unplug, driver crash) the polling loop would hang.
