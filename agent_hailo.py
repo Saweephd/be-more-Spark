@@ -228,7 +228,7 @@ class BotGUI:
                 _get_vlm()
             except Exception as e:
                 print(f"[VLM] Warmup skipped: {e}")
-        threading.Thread(target=_warmup_vlm, daemon=True).start()
+        # DISABLED: warmup leaks /dev/hailo0 FDs and blocks hailo-ollama. # threading.Thread(target=_warmup_vlm, daemon=True).start()
 
     def exit_fullscreen(self, event=None):
         # Signal all background threads to wind down before tearing the UI.
