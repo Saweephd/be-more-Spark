@@ -1,0 +1,16 @@
+{
+  "spark_host": "192.168.1.x",
+  "spark_port": 11434,
+  "default_model": "gpt-oss:20b",
+  "fallback_model": "gemma4:31b",
+  "openweather_api_key": "",
+  "weather_lat": "",
+  "weather_lon": "",
+  "weather_units": "imperial",
+  "ollama_timeout": 120,
+  "ping_targets": {
+    "Your Spark Host": "192.168.1.x",
+    "Your NAS": "192.168.1.x",
+    "Your Router": "192.168.1.x"
+  }
+}

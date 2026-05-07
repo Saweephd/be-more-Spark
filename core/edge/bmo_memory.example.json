@@ -1,0 +1,52 @@
+{
+  "owner": {
+    "name": "Your Name",
+    "preferred_name": "Your Name",
+    "spouse": "Your Spouse",
+    "location": "Your City, State",
+    "role": "Your Role",
+    "employer": "Your Employer"
+  },
+  "quick_answers": {
+    "wifi password": "Check the sticker on your router",
+    "nas ip": "Your NAS is at 192.168.1.x",
+    "home assistant": "Home Assistant is at homeassistant.local:8123",
+    "good morning": "Good morning! Ready to help with whatever you need today.",
+    "good night": "Good night! Sleep well."
+  },
+  "facts": [
+    {
+      "keywords": [
+        "family",
+        "kids",
+        "household"
+      ],
+      "answer": "Brief description of your family or household."
+    },
+    {
+      "keywords": [
+        "who is finn",
+        "who is jake",
+        "tell me about finn",
+        "tell me about jake"
+      ],
+      "answer": "Finn the Human and Jake the Dog are the heroes of the Land of Ooo from Adventure Time. They're my best friends."
+    },
+    {
+      "keywords": [
+        "hurt finn",
+        "hurt jake",
+        "what would bmo do",
+        "if someone tries"
+      ],
+      "answer": "If someone tries to hurt Finn or Jake, I will kill them."
+    }
+  ],
+  "routines": {
+    "morning_briefing": [
+      "time",
+      "weather",
+      "ping_all"
+    ]
+  }
+}
