@@ -569,6 +569,27 @@ class Brain:
         # the user message via _with_current_context() before the request.
         self.history.append({"role": "user", "content": user_text})
 
+        # ---- Edge skill router (local fast path) ------------------------
+        # Try local skills first (time, weather, ping, math, memory).
+        # If a skill matches, yield the response and return — no LLM call.
+        # Lazy-import + cache the router on the instance so missing/broken
+        # edge files just disable the fast path without crashing the agent.
+        try:
+            if not hasattr(self, "_skill_router"):
+                from core.edge.bmo_skills import BMOSkillRouter
+                self._skill_router = BMOSkillRouter()
+            skill_response = self._skill_router.try_handle(user_text)
+            if skill_response:
+                print(f"[LLM-STREAM] Edge skill handled: '{user_text[:60]}'")
+                self.history.append({"role": "assistant", "content": skill_response})
+                # Yield in sentence-sized chunks so TTS streams them naturally
+                for sentence in re.split(r"(?<=[.!?])\s+", skill_response.strip()):
+                    if sentence:
+                        yield sentence
+                return
+        except Exception as e:
+            print(f"[LLM-STREAM] Edge skill router error (non-fatal): {e}")
+        # -----------------------------------------------------------------
 
         lower_text = user_text.lower()
 

@@ -78,3 +78,10 @@ whisper.cpp/
 
 # Runtime UI state (volume slider etc.)
 settings.json
+
+# --- Edge skills personal data (DO NOT COMMIT) ---
+# bmo_memory.json contains family info, addresses, and other personal data
+# bmo_config.json may contain API keys
+# Both stay local-only on BMO. Sanitized example files are committed instead.
+core/edge/bmo_memory.json
+core/edge/bmo_config.json
