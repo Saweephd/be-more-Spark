@@ -18,6 +18,7 @@ Changelog
   1.0.1  2026-11-12  After the first spoken test: close() can no longer hang,
                      closing silence counts every block below the speech level,
                      speech level lowered from 3x to 2.5x the room noise.
+  1.0.2  2026-11-12  Deep input buffer (latency=1.0) against overflows and stalls.
 """
 
 from __future__ import annotations
@@ -202,10 +203,11 @@ class MicStream:
     """One long-lived microphone stream delivering fixed-size int16 blocks."""
 
     def __init__(self, device, samplerate: int = CAPTURE_RATE, block_frames: int = BLOCK_FRAMES,
-                 max_queued_blocks: int = 50):
+                 max_queued_blocks: int = 50, latency: float = 1.0):
         self.device = device
         self.samplerate = samplerate
         self.block_frames = block_frames
+        self.latency = latency
         self._queue = collections.deque(maxlen=max_queued_blocks)
         self._cond = threading.Condition()
         self._stream = None
@@ -228,6 +230,12 @@ class MicStream:
         self._stream = sd.InputStream(
             samplerate=self.samplerate, device=self.device, channels=1, dtype="int16",
             blocksize=self.block_frames, callback=self._callback,
+            # A deep driver buffer.  The callback runs in Python and sometimes
+            # has to wait its turn behind the wake word model and the face
+            # animation; with the default (shallow) buffer that showed up as
+            # about one overflow a second and a stalled stream every few
+            # minutes.  Blocks are still handed over as soon as they are full.
+            latency=self.latency,
         )
         self._stream.start()
         self.last_block_at = time.time()

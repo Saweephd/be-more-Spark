@@ -713,7 +713,7 @@ class BotGUI:
                         continue
 
                     if block is None:
-                        if time.time() - last_data_time > 3.0:
+                        if time.time() - last_data_time > 2.0:
                             raise RuntimeError(
                                 f"microphone stopped delivering audio (overflows so far: {mic.overflows})")
                         continue
@@ -769,7 +769,7 @@ class BotGUI:
                     except Exception:
                         pass
                     os._exit(3)
-                if self.stop_event.wait(timeout=2):
+                if self.stop_event.wait(timeout=0.5):
                     return False
                 # Try to go back to IDLE if we were in ERROR
                 if self.current_state == BotStates.ERROR:
