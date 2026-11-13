@@ -350,7 +350,11 @@ class BotGUI:
             self.thinking_audio_process = None
 
     def handle_click(self, event):
-        """Map screen clicks to hot corners, mouth-tap mute, or tap-to-speak."""
+        """Map screen taps to the hot corners or tap-to-speak.
+
+        Tapping the mouth used to toggle mute.  That zone covered the middle of
+        the face, so taps meant to wake BMO silenced it instead (12 Nov 2026);
+        mute now lives only in the bottom-left corner."""
         # Any click counts as a user interaction — keeps the watchdog honest
         # regardless of which branch handles the tap.
         self.last_user_interaction = time.time()
@@ -362,15 +366,10 @@ class BotGUI:
         x, y = event.x, event.y
         win_w = self.master.winfo_width()
         win_h = self.master.winfo_height()
-        corner_w = win_w // 4
-        corner_h = win_h // 4
-
-        # Mouth zone: centre-lower portion of the face (where BMO's mouth lives)
-        mouth_x0 = int(win_w * 0.27)
-        mouth_x1 = int(win_w * 0.73)
-        mouth_y0 = int(win_h * 0.55)
-        mouth_y1 = int(win_h * 0.80)
-        in_mouth = mouth_x0 <= x <= mouth_x1 and mouth_y0 <= y <= mouth_y1
+        # Corners are kept small (an eighth of the width, a sixth of the height)
+        # so a tap meant for "speak to me" does not land on a hot corner.
+        corner_w = win_w // 8
+        corner_h = win_h // 6
 
         # Top-centre volume zone: middle 40% of width, top 15% of height
         vol_x0 = int(win_w * 0.30)
@@ -391,10 +390,6 @@ class BotGUI:
             self.trigger_music()
         elif x < corner_w and y > win_h - corner_h:
             print(f"[CLICK] Bottom-Left: Toggle Mute ({x},{y})")
-            self.mute_bmo()
-        elif in_mouth:
-            # Tap BMO's mouth to toggle mute — works in any state
-            print(f"[CLICK] Mouth: Toggle Mute ({x},{y})")
             self.mute_bmo()
         elif self.current_state in [BotStates.IDLE, BotStates.SCREENSAVER]:
             print(f"[CLICK] Body: Manual Wake ({x},{y})")
@@ -685,6 +680,7 @@ class BotGUI:
 
         retry_count = 0
         was_busy = False
+        seg_ms, seg_quiet_ms, seg_best = 0, 0, 0.0
         while not self.stop_event.is_set():
             try:
                 mic = self._get_mic()
@@ -728,19 +724,36 @@ class BotGUI:
                         if self.current_state == BotStates.ERROR:
                             self.set_state(BotStates.IDLE, "Tap to speak")
 
-                    self._noise_floor.add(block_rms(block))
+                    rms = block_rms(block)
+                    self._noise_floor.add(rms)
                     audio_16k = self._decimator.process(block)
                     oww.predict(audio_16k)
 
+                    best = 0.0
                     for key in oww.prediction_buffer.keys():
                         score = oww.prediction_buffer[key][-1]
+                        best = max(best, score)
                         if score > WAKE_WORD_THRESHOLD:
                             print(f"[EARS] Wake Word Detected: {key} (Score: {score:.2f})")
                             oww.reset()
                             return True
-                        if score > 0.10:
-                            # Near misses, logged so the threshold can be tuned from real use.
-                            print(f"[EARS] Wake score {score:.2f} (below {WAKE_WORD_THRESHOLD})")
+
+                    # Diagnostic: whenever somebody speaks near BMO without waking
+                    # it, log how long they spoke and the best wake score in that
+                    # stretch.  Shows whether a missed "Hey BMO" was heard and
+                    # scored low, or was not heard at all.  No audio or words are kept.
+                    if rms >= max(self._noise_floor.value * 2.5, 400.0):
+                        seg_ms += 80
+                        seg_quiet_ms = 0
+                        seg_best = max(seg_best, best)
+                    elif seg_ms:
+                        seg_quiet_ms += 80
+                        seg_best = max(seg_best, best)
+                        if seg_quiet_ms >= 640:
+                            if seg_ms >= 400:
+                                print(f"[EARS] Heard {seg_ms / 1000:.1f}s of speech, no wake "
+                                      f"(best score {seg_best:.2f}, need {WAKE_WORD_THRESHOLD})")
+                            seg_ms, seg_quiet_ms, seg_best = 0, 0, 0.0
             except Exception as e:
                 retry_count += 1
                 print(f"[EARS] Audio Input Error (Attempt {retry_count}): {e}")
@@ -1692,15 +1705,20 @@ class BotGUI:
                         {"role": "user", "content": prompt}
                     ],
                     "stream": False,
-                    "options": {"temperature": 0.9, "num_predict": 20}
+                    # gpt-oss thinks before it answers; with only 20 tokens it
+                    # spent them all thinking and returned an empty search term.
+                    "think": "low",
+                    "options": {"temperature": 0.9, "num_predict": 200}
                 }
                 
                 search_term = "cute robot"
                 try:
                     resp = http_requests.post(LLM_URL, json=payload, timeout=30)
                     if resp.status_code == 200:
-                        search_term = resp.json().get("message", {}).get("content", "").strip()
-                        search_term = search_term.replace('"', '').replace('\n', '').strip()
+                        term = resp.json().get("message", {}).get("content", "").strip()
+                        term = term.replace('"', '').replace('\n', ' ').strip()
+                        if term:
+                            search_term = term[:60]
                 except Exception as e:
                     print(f"[IMAGE] LLM call failed: {e}")
 
