@@ -184,12 +184,7 @@ def strip_prompt_leakage(content: str) -> str:
 MEMORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory.json")
 
 def _quick_lead_in(user_text: str, intent: str) -> str:
-    """Return a one-line BMO acknowledgement before a pre-routed action runs.
-
-    Tries FAST_LLM_MODEL with a *tight* 600 ms ceiling — beyond that the user
-    perceives lag and the static fallback is the better experience.  On Pi 5 +
-    Hailo + qwen2.5-1.5B, a 30-token gen typically lands at 200–500 ms when
-    the model is hot, so this is the right cut-off."""
+    """Return a one-line BMO acknowledgement before a pre-routed action runs."""
     import random as _random
     fallbacks = {
         "image": [
@@ -211,26 +206,9 @@ def _quick_lead_in(user_text: str, intent: str) -> str:
             "Oh yeah, BMO loves this song!",
         ],
     }
-    try:
-        payload = {
-            "model": FAST_LLM_MODEL,
-            "messages": [
-                {"role": "system", "content":
-                 "You are BMO. Reply with ONE short, cheerful sentence (max 12 words) "
-                 "acknowledging what the user asked for. No markdown, no quotes."},
-                {"role": "user", "content": user_text},
-            ],
-            "stream": False,
-            "options": {"temperature": 0.8, "num_predict": 30},
-        }
-        r = requests.post(LLM_URL, json=payload, timeout=0.6)
-        if r.status_code == 200:
-            txt = r.json().get("message", {}).get("content", "").strip().strip('"').strip("'")
-            txt = re.sub(r"\s+", " ", txt)
-            if 3 <= len(txt) <= 100:
-                return txt
-    except Exception:
-        pass
+    # The model call that used to sit here had a 0.6 s limit sized for the
+    # on-board Hailo model.  Against the Spark (0.5 s warm, 5 s cold) it rarely finished in time, so the
+    # canned lines are used directly.
     options = fallbacks.get(intent, [])
     return _random.choice(options) if options else ""
 

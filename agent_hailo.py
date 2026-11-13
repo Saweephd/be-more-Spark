@@ -39,6 +39,7 @@ from core.llm import Brain, extract_json_object, strip_prompt_leakage
 from core.tts import play_audio_on_hardware
 from core.stt import transcribe_audio
 from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE_WORD_THRESHOLD, ALSA_DEVICE, VOLUME
+from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
 
 # =========================================================================
 # 1. HARDWARE CONFIGURATION
@@ -103,6 +104,10 @@ class BotGUI:
         self.thinking_sound_active = threading.Event()
         self.tts_active = threading.Event()
         self.manual_wake_event = threading.Event()
+        # One shared microphone stream for wake word and recording (core/audio_capture.py)
+        self._mic = None
+        self._decimator = Decimator(max(1, MIC_SAMPLE_RATE // 16000))
+        self._noise_floor = NoiseFloor()
         self.current_state = BotStates.WARMUP
         self.last_state_change = time.time()
         # Tracks the last real user/agent interaction.  Updated on wake fire,
@@ -644,75 +649,85 @@ class BotGUI:
         self.master.after(interval, self.update_animation)
 
     # --- AUDIO INPUT ---
+    def _get_mic(self):
+        """Return the shared microphone stream, opening it if needed."""
+        if self._mic is None:
+            self._mic = MicStream(MIC_DEVICE_INDEX, samplerate=MIC_SAMPLE_RATE)
+        if not self._mic.running:
+            self._mic.start()
+        return self._mic
+
+    def _reset_mic(self):
+        """Close the microphone stream so the next _get_mic() reopens it."""
+        if self._mic is not None:
+            self._mic.close()
+        self._decimator.reset()
+
     def wait_for_wakeword(self, oww):
-        """Block until wake word is heard with retry logic for mic errors."""
-        CHUNK = 1280
-        capture_rate = MIC_SAMPLE_RATE # 48000
-        target_rate = 16000
-        downsample_factor = capture_rate // target_rate
-        
-        print(f"[EARS] Waiting for wake word... (Index: {MIC_DEVICE_INDEX}, Rate: {capture_rate})")
-        
+        """Block until the wake word is heard (or the screen is tapped).
+
+        Every block is passed to the wake word model.  The model expects a
+        continuous stream; skipping the quiet blocks (as earlier versions did)
+        hands it chopped-up speech and lowers its scores."""
+        print(f"[EARS] Waiting for wake word... (Index: {MIC_DEVICE_INDEX}, Rate: {MIC_SAMPLE_RATE})")
+
         retry_count = 0
+        was_busy = False
         while not self.stop_event.is_set():
             try:
-                # Use a smaller blocksize to reduce latency
-                with sd.InputStream(samplerate=capture_rate, device=MIC_DEVICE_INDEX, channels=1, dtype='int16', blocksize=CHUNK * downsample_factor) as stream:
-                    retry_count = 0 # Reset on success
+                mic = self._get_mic()
+                retry_count = 0  # Reset on success
+                last_data_time = time.time()
+                # Start clean: whatever queued up while BMO was answering is
+                # BMO's own voice, and must not be able to wake it again.
+                mic.flush()
+                self._decimator.reset()
+                oww.reset()
+                while not self.stop_event.is_set():
+                    if self.manual_wake_event.is_set():
+                        self.manual_wake_event.clear()
+                        print("[EARS] Wake triggered via tap.")
+                        mic.flush()
+                        return True
+
+                    block = mic.read(timeout=0.5)
+
+                    if self.is_busy:
+                        # BMO is talking or working: drop the audio so it does
+                        # not wake itself, and start the model fresh afterwards.
+                        was_busy = True
+                        last_data_time = time.time()
+                        continue
+                    if was_busy:
+                        was_busy = False
+                        mic.flush()
+                        self._decimator.reset()
+                        oww.reset()
+                        continue
+
+                    if block is None:
+                        if time.time() - last_data_time > 10.0:
+                            raise RuntimeError("microphone stopped delivering audio")
+                        continue
                     last_data_time = time.time()
-                    while not self.stop_event.is_set():
-                        if self.manual_wake_event.is_set():
-                            self.manual_wake_event.clear()
-                            print("[EARS] Wake triggered via tap.")
+
+                    self._noise_floor.add(block_rms(block))
+                    audio_16k = self._decimator.process(block)
+                    oww.predict(audio_16k)
+
+                    for key in oww.prediction_buffer.keys():
+                        score = oww.prediction_buffer[key][-1]
+                        if score > WAKE_WORD_THRESHOLD:
+                            print(f"[EARS] Wake Word Detected: {key} (Score: {score:.2f})")
+                            oww.reset()
                             return True
-
-                        if self.is_busy:
-                            time.sleep(0.5)
-                            last_data_time = time.time() # Reset watchdog
-                            continue
-                            
-                        data, overflowed = stream.read(CHUNK * downsample_factor)
-                        
-                        # Real failure modes: None / wrong-shape data
-                        if data is None or data.size == 0:
-                            if time.time() - last_data_time > 10.0:
-                                print("[EARS] Watchdog: Mic stream returned None/empty. Restarting...")
-                                break
-                            time.sleep(0.01)
-                            continue
-
-                        last_data_time = time.time()  # Pet the watchdog (we got real data)
-
-                        # 1. Quick Volume Check (Skip OWW if it's too quiet)
-                        # All-zero arrays are valid (quiet room) — don't treat as a mic failure.
-                        current_max = np.max(np.abs(data))
-                        if current_max < 250: # Adjust threshold as needed
-                            continue
-
-                        # 2. Down-sample 48 kHz → 16 kHz with an IIR low-pass
-                        # before decimating.  Nearest-neighbor slicing aliases
-                        # high-frequency speech content into the OWW band and
-                        # hurts wake-word reliability in noisy rooms.
-                        flat = data.flatten()
-                        if downsample_factor >= 2:
-                            audio_16k = scipy.signal.decimate(
-                                flat, downsample_factor, ftype='iir', zero_phase=False,
-                            ).astype(np.int16)
-                        else:
-                            audio_16k = flat
-
-                        # 3. Predict
-                        oww.predict(audio_16k)
-                        
-                        for key in oww.prediction_buffer.keys():
-                            score = oww.prediction_buffer[key][-1]
-                            if score > WAKE_WORD_THRESHOLD:
-                                print(f"[EARS] Wake Word Detected: {key} (Score: {score:.2f})")
-                                oww.reset()
-                                return True
+                        if score > 0.10:
+                            # Near misses, logged so the threshold can be tuned from real use.
+                            print(f"[EARS] Wake score {score:.2f} (below {WAKE_WORD_THRESHOLD})")
             except Exception as e:
                 retry_count += 1
                 print(f"[EARS] Audio Input Error (Attempt {retry_count}): {e}")
+                self._reset_mic()
                 self.set_state(BotStates.ERROR, "Mic Error")
                 if retry_count > 5:
                     print("[EARS] Too many mic errors, restarting audio system...")
@@ -727,78 +742,57 @@ class BotGUI:
         return False
 
     def record_audio(self):
-        """Record until silence with volume-driven lip sync, with retry logic for mic errors."""
+        """Record the user's request and return a 16 kHz WAV path, or None.
+
+        Reads from the same stream the wake word loop uses, so nothing said
+        straight after "Hey BMO" is lost.  When to stop is decided by
+        EndpointDetector, which works in milliseconds and compares against the
+        room's measured background level.  Returns None when nobody spoke."""
         print("Recording...")
-        filename = "input.wav"
+        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input.wav")
         frames = []
-        silent_chunks = 0
-        has_spoken = False
-        total_samples = 0
-        loud_chunks_seen = 0
-        MAX_SAMPLES = MIC_SAMPLE_RATE * 15  # 15-second hard cap
+        detector = EndpointDetector(noise_rms=self._noise_floor.value)
+        last_block_at = time.time()
 
-        def callback(indata, frames_count, time, status):
-            nonlocal silent_chunks, has_spoken, total_samples, loud_chunks_seen
-            vol = np.linalg.norm(indata)
-            # Update mouth_open for real-time lip sync during recording (listening mode)
-            if self.current_state == BotStates.LISTENING:
-                self.mouth_open = min(60, vol / 500)
+        try:
+            mic = self._get_mic()
+            while not self.stop_event.is_set():
+                block = mic.read(timeout=0.5)
+                if block is None:
+                    # Watchdog: USB unplug or driver crash mid-recording.
+                    if time.time() - last_block_at > 3.0:
+                        print("[REC] Watchdog: microphone stopped delivering audio.")
+                        self._reset_mic()
+                        break
+                    continue
+                last_block_at = time.time()
+                frames.append(block)
+                rms = block_rms(block)
+                # Mouth movement while listening follows the input level.
+                if self.current_state == BotStates.LISTENING:
+                    self.mouth_open = min(60, rms / 25)
+                if detector.feed(rms):
+                    break
+        except Exception as e:
+            print(f"Recording Error: {e}")
+            self._reset_mic()
+            self.set_state(BotStates.ERROR, "Mic Error")
+            self.mouth_open = 0
+            return None
 
-            frames.append(indata.copy())
-            total_samples += indata.shape[0]
-            if vol < 4000:  # Silence threshold
-                silent_chunks += 1
-                # has_spoken stays whatever it was — silence doesn't change it
-            else:
-                silent_chunks = 0
-                # Require 5 confirmed loud chunks (~25ms) before declaring speech started.
-                # This prevents wake-word tail or transient noise from prematurely
-                # triggering has_spoken=True (which would let silent_chunks > 30
-                # bail us before the user actually speaks their prompt).
-                loud_chunks_seen += 1
-                if loud_chunks_seen >= 5:
-                    has_spoken = True
+        self.mouth_open = 0  # Reset
+        print(f"[REC] {detector.summary()}")
+        if not frames or not detector.heard_speech:
+            return None
+        data = np.concatenate(frames)
 
-        retry_count = 0
-        while retry_count < 3:
-            try:
-                with sd.InputStream(samplerate=MIC_SAMPLE_RATE, device=MIC_DEVICE_INDEX, channels=1, dtype='int16', callback=callback):
-                    last_callback_samples = 0
-                    last_callback_at = time.time()
-                    while not self.stop_event.is_set():
-                        sd.sleep(50)
-                        if not has_spoken and silent_chunks > 60: break  # 3s of silence (was 5s)
-                        if has_spoken and silent_chunks > 30: break  # 1.5s after speech (was 2s)
-                        if total_samples >= MAX_SAMPLES: break  # 15-second hard cap (sample-accurate)
-                        # Watchdog: if the callback stops firing mid-recording
-                        # (USB unplug, driver crash) the polling loop would hang.
-                        if total_samples > last_callback_samples:
-                            last_callback_samples = total_samples
-                            last_callback_at = time.time()
-                        elif time.time() - last_callback_at > 3.0:
-                            print("[REC] Watchdog: callback stopped firing — aborting record.")
-                            break
-                    break # Success!
-            except Exception as e:
-                retry_count += 1
-                print(f"Recording Error (Attempt {retry_count}): {e}")
-                time.sleep(1)
-                if retry_count >= 3:
-                    self.set_state(BotStates.ERROR, "Mic Error")
-                    return None
-
-        self.mouth_open = 0 # Reset
-        if not frames: return None
-        data = np.concatenate(frames, axis=0)
-
-        # Down-sample 48 kHz → 16 kHz with a polyphase filter (better than the
-        # old ffmpeg subprocess + extra disk write). 48000 / 3 = 16000 exactly.
+        # Down-sample 48 kHz -> 16 kHz with a polyphase filter. 48000 / 3 = 16000 exactly.
         import scipy.io.wavfile
         ratio = MIC_SAMPLE_RATE // 16000
         if MIC_SAMPLE_RATE == 16000 or ratio < 2:
-            data_16k = data.flatten()
+            data_16k = data
         else:
-            data_16k = scipy.signal.resample_poly(data.flatten().astype(np.float32), 1, ratio)
+            data_16k = scipy.signal.resample_poly(data.astype(np.float32), 1, ratio)
             data_16k = np.clip(data_16k, -32768, 32767).astype(np.int16)
         scipy.io.wavfile.write(filename, 16000, data_16k)
         return filename
@@ -1366,8 +1360,12 @@ class BotGUI:
                 self.set_state(BotStates.THINKING, "Transcribing...")
                 self._thinking_sound_start()
 
-                user_text = self.transcribe(wav_file)
+                # Nobody spoke (or the mic failed): skip Whisper, which would
+                # only invent text from silence, and go back to listening.
+                t_stt = time.time()
+                user_text = self.transcribe(wav_file) if wav_file else ""
                 print(f"User Transcribed: {user_text}")
+                print(f"[TIMING] speech to text {time.time() - t_stt:.2f}s")
                 
                 if len(user_text) < 2:
                     self.set_state(BotStates.IDLE, "Tap to speak")
@@ -1835,7 +1833,7 @@ class BotGUI:
     def screensaver_audio_loop(self):
         import datetime
         import requests as http_requests
-        from core.search import search_web
+        from core.search import search_web, search_images
         from core.config import LLM_URL, FAST_LLM_MODEL
         
         # Topics BMO might wonder about — used as web search seeds
