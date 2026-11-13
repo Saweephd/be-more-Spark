@@ -580,6 +580,13 @@ class Brain:
             if not hasattr(self, "_skill_router"):
                 from core.edge.bmo_skills import BMOSkillRouter
                 self._skill_router = BMOSkillRouter()
+            # Correct names speech to text gets wrong ("Maisie" -> "Mazzee")
+            # before either the local skills or the model see the question.
+            fixed = self._skill_router.normalize(user_text)
+            if fixed != user_text:
+                print(f"[LLM-STREAM] Name fix: {user_text!r} -> {fixed!r}")
+                user_text = fixed
+                self.history[-1]["content"] = user_text
             skill_response = self._skill_router.try_handle(user_text)
             if skill_response:
                 print(f"[LLM-STREAM] Edge skill handled: '{user_text[:60]}'")

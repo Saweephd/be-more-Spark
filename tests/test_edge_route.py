@@ -35,6 +35,95 @@ class RouteTests(unittest.TestCase):
         self.assertNotIn("0", reply[:1])
 
 
+class MemoryMatchTests(unittest.TestCase):
+    MEMORY = {
+        "aliases": {"Mazzee": ["maisie", "mazie", "maisy"], "BMO": ["bimo", "beemo"]},
+        "quick_answers": {
+            "rose": "ROSE", "work": "WORK", "van": "VAN", "dog": "DOG",
+            "wifi password": "WIFI", "team size": "TEAM",
+        },
+        "facts": [
+            {"keywords": ["hurt finn", "if someone tries"], "answer": "SIGNATURE"},
+            {"keywords": ["maldives"], "answer": "MALDIVES"},
+        ],
+    }
+
+    def look(self, text):
+        from core.edge.bmo_skills import Skills
+        return Skills.memory_lookup(text, self.MEMORY)
+
+    def test_direct_questions_match_single_word_keys(self):
+        for q in ("Who is Rose?", "who's rose", "Hey BMO, tell me about Rose.", "Rose",
+                  "What about the van?", "tell me about my dog"):
+            self.assertIsNotNone(self.look(q), q)
+
+    def test_single_word_keys_do_not_hijack_other_questions(self):
+        for q in ("How does a microwave work?", "What should I get Rose for her birthday?",
+                  "Can we advance the clock?", "Is a hot dog a sandwich?",
+                  "Write a line of prose about the sea", "What is the capital of Peru?"):
+            self.assertIsNone(self.look(q), q)
+
+    def test_multi_word_keys_match_anywhere_on_word_boundaries(self):
+        self.assertEqual(self.look("what's the wifi password again"), "WIFI")
+        self.assertEqual(self.look("What would you do if someone tries to hurt Finn?"), "SIGNATURE")
+        self.assertIsNone(self.look("the wifi passwords are long"))
+
+    def test_fact_single_word_needs_a_direct_ask(self):
+        self.assertEqual(self.look("Tell me about the Maldives"), "MALDIVES")
+        self.assertIsNone(self.look("How deep is the ocean around the Maldives?"))
+
+    def test_aliases_fix_speech_to_text_spellings(self):
+        from core.edge.bmo_skills import apply_aliases
+        a = self.MEMORY["aliases"]
+        self.assertEqual(apply_aliases("What if someone hurt Maisie?", a), "What if someone hurt Mazzee?")
+        self.assertEqual(apply_aliases("hey bimo, where is MAZIE", a), "hey BMO, where is Mazzee")
+        self.assertEqual(apply_aliases("the maisies are out", a), "the maisies are out")
+        self.assertEqual(apply_aliases("no names here", None), "no names here")
+
+    def test_household_notes_reach_the_system_prompt_only_when_present(self):
+        from unittest import mock
+        import core.config as config
+        with mock.patch.object(config, "HOUSEHOLD_FILE", "/nonexistent/notes.md"):
+            self.assertNotIn("HOUSEHOLD NOTES", config.get_system_prompt())
+        path = tempfile.mktemp(suffix=".md")
+        with open(path, "w") as f:
+            f.write("The dog is called Testdog.")
+        with mock.patch.object(config, "HOUSEHOLD_FILE", path):
+            prompt = config.get_system_prompt()
+        self.assertIn("HOUSEHOLD NOTES", prompt)
+        self.assertIn("Testdog", prompt)
+        self.assertTrue(prompt.startswith("You are BMO"))
+
+
+class WeatherTests(unittest.TestCase):
+    DATA = {
+        "current": {"temperature_2m": 41.2, "apparent_temperature": 35.0, "weather_code": 3},
+        "daily": {"weather_code": [61, 0], "temperature_2m_max": [47.6, 55.1],
+                  "temperature_2m_min": [33.9, 38.2], "precipitation_probability_max": [70, 5]},
+    }
+
+    def test_today(self):
+        from core.edge.bmo_skills import Skills
+        line = Skills.describe_weather(self.DATA)
+        self.assertEqual(line, "Right now it is 41 degrees, feels like 35 and cloudy. "
+                               "Today: light rain, high 48, low 34, with a 70 percent chance of rain or snow.")
+
+    def test_tomorrow(self):
+        from core.edge.bmo_skills import Skills
+        self.assertEqual(Skills.describe_weather(self.DATA, tomorrow=True),
+                         "Tomorrow looks clear, with a high of 55 and a low of 38 degrees.")
+
+    def test_unconfigured_location_falls_through_to_the_model(self):
+        from core.edge.bmo_skills import Skills
+        self.assertIsNone(Skills.weather({"weather_lat": "", "weather_lon": ""}))
+
+    def test_small_talk_is_not_a_status_request(self):
+        from core.edge.bmo_skills import IntentClassifier
+        self.assertIsNone(IntentClassifier.classify("how are you doing today"))
+        self.assertNotEqual(IntentClassifier.classify("who is outside"), "weather")
+        self.assertEqual(IntentClassifier.classify("what's the weather today"), "weather")
+
+
 class CtlArgumentTests(unittest.TestCase):
     def run_ctl(self, *args):
         env = dict(os.environ, XDG_RUNTIME_DIR=tempfile.mkdtemp())

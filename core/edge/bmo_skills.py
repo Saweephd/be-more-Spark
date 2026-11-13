@@ -53,6 +53,69 @@ def _save_json(path, data):
 
 
 # ---------------------------------------------------------------------------
+# Text matching helpers
+# ---------------------------------------------------------------------------
+_LEAD_INS = (
+    "hey bmo", "bmo", "ok", "okay", "so", "um", "uh", "and", "please",
+    "can you tell me about", "can you tell me", "could you tell me about",
+    "do you know about", "do you know who", "do you know what", "do you know",
+    "tell me about", "tell me", "what about", "how about",
+    "who is", "who's", "whos", "who are", "what is", "what's", "whats", "what are",
+    "where is", "where's", "wheres",
+)
+_ARTICLES = ("the", "a", "an", "my", "our", "your", "stan's", "stans")
+
+
+def normalize_text(text):
+    """Lower-case, drop punctuation except apostrophes, collapse spaces."""
+    t = re.sub(r"[^a-z0-9' ]+", " ", str(text).lower())
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def direct_subject(normalized_query):
+    """What a direct question is about: "who is rose" -> "rose".
+
+    Strips lead-ins ("hey bmo", "tell me about") and articles from the front,
+    repeatedly.  Returns what is left, which may be the whole query."""
+    q = normalized_query
+    changed = True
+    while changed and q:
+        changed = False
+        for lead in sorted(_LEAD_INS + _ARTICLES, key=len, reverse=True):
+            if q == lead:
+                return ""
+            if q.startswith(lead + " "):
+                q = q[len(lead) + 1:]
+                changed = True
+                break
+    return q
+
+
+def key_matches(key, normalized_query, subject=None):
+    k = normalize_text(key)
+    if not k:
+        return False
+    if " " in k:
+        return re.search(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])", normalized_query) is not None
+    if subject is None:
+        subject = direct_subject(normalized_query)
+    return subject == k
+
+
+def apply_aliases(text, aliases):
+    """Replace the spellings speech to text produces with the real name.
+
+    ``aliases`` maps the real spelling to a list of variants, for example
+    {"Mazzee": ["maisie", "mazie"]}.  Whole words only, any letter case."""
+    out = str(text)
+    for canonical, variants in (aliases or {}).items():
+        for variant in sorted(variants, key=len, reverse=True):
+            out = re.sub(r"(?<![A-Za-z0-9])" + re.escape(variant) + r"(?![A-Za-z0-9])",
+                         canonical, out, flags=re.IGNORECASE)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Skills
 # ---------------------------------------------------------------------------
 class Skills:
@@ -66,25 +129,57 @@ class Skills:
         return datetime.date.today().strftime("%A, %B %d, %Y")
 
     @staticmethod
-    def weather(config):
-        api_key = config.get("openweather_api_key", "")
-        if not api_key:
-            return "Weather API key not configured. Set openweather_api_key in bmo_config.json."
+    def weather(config, query=""):
+        """Current weather and today's (or tomorrow's) forecast, as one spoken line.
+
+        Uses Open-Meteo, which needs no account or key; only weather_lat and
+        weather_lon must be set in bmo_config.json.  Returns None when the
+        location is not set or the lookup fails, so the question goes on to
+        the model instead of BMO reading out a configuration error."""
         lat, lon = config.get("weather_lat", ""), config.get("weather_lon", "")
-        units = config.get("weather_units", "imperial")
         if not lat or not lon:
-            return "Weather location not configured. Set weather_lat and weather_lon in bmo_config.json."
-        url = (f"https://api.openweathermap.org/data/2.5/weather"
-               f"?lat={lat}&lon={lon}&units={units}&appid={api_key}")
+            return None
+        imperial = config.get("weather_units", "imperial") == "imperial"
+        url = ("https://api.open-meteo.com/v1/forecast"
+               f"?latitude={lat}&longitude={lon}"
+               "&current=temperature_2m,apparent_temperature,weather_code"
+               "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+               f"&temperature_unit={'fahrenheit' if imperial else 'celsius'}"
+               "&timezone=auto&forecast_days=2")
         try:
             with urllib.request.urlopen(url, timeout=5) as resp:
                 data = json.loads(resp.read())
-            temp, feels = data["main"]["temp"], data["main"]["feels_like"]
-            desc, humid = data["weather"][0]["description"], data["main"]["humidity"]
-            sym = "\u00b0F" if units == "imperial" else "\u00b0C"
-            return f"Currently {temp}{sym} (feels like {feels}{sym}), {desc}, humidity {humid}%."
+            return Skills.describe_weather(data, tomorrow="tomorrow" in query.lower())
         except Exception as e:
-            return f"Weather fetch failed: {e}"
+            print(f"[SKILL] weather lookup failed: {e}")
+            return None
+
+    WEATHER_CODES = {
+        0: "clear", 1: "mostly clear", 2: "partly cloudy", 3: "cloudy", 45: "foggy", 48: "foggy",
+        51: "light drizzle", 53: "drizzle", 55: "heavy drizzle", 56: "freezing drizzle",
+        57: "freezing drizzle", 61: "light rain", 63: "rain", 65: "heavy rain",
+        66: "freezing rain", 67: "freezing rain", 71: "light snow", 73: "snow", 75: "heavy snow",
+        77: "snow grains", 80: "light showers", 81: "showers", 82: "heavy showers",
+        85: "snow showers", 86: "heavy snow showers", 95: "thunderstorms",
+        96: "thunderstorms with hail", 99: "thunderstorms with hail",
+    }
+
+    @staticmethod
+    def describe_weather(data, tomorrow=False):
+        codes = Skills.WEATHER_CODES
+        daily = data["daily"]
+        i = 1 if tomorrow else 0
+        high, low = round(daily["temperature_2m_max"][i]), round(daily["temperature_2m_min"][i])
+        sky = codes.get(daily["weather_code"][i], "mixed weather")
+        rain = daily.get("precipitation_probability_max", [None, None])[i]
+        rain_part = f", with a {round(rain)} percent chance of rain or snow" if rain is not None and rain >= 20 else ""
+        if tomorrow:
+            return f"Tomorrow looks {sky}, with a high of {high} and a low of {low} degrees{rain_part}."
+        now = data["current"]
+        temp, feels = round(now["temperature_2m"]), round(now["apparent_temperature"])
+        feels_part = f", feels like {feels}" if abs(feels - temp) >= 3 else ""
+        return (f"Right now it is {temp} degrees{feels_part} and {codes.get(now['weather_code'], 'mixed')}. "
+                f"Today: {sky}, high {high}, low {low}{rain_part}.")
 
     @staticmethod
     def ping_device(host, name=""):
@@ -175,12 +270,20 @@ class Skills:
 
     @staticmethod
     def memory_lookup(query, memory):
-        q = query.lower()
+        """Answer from household memory, or None to let the model handle it.
+
+        Matching is on whole words.  A multi-word key ("wifi password",
+        "hurt finn") matches wherever it appears.  A single-word key ("rose",
+        "work", "van") matches only when the question is a direct ask about it
+        ("who is Rose?", "tell me about the van").  Before this rule, "how does
+        that work" returned Stan's job and "advance" matched "van"."""
+        q = normalize_text(query)
+        subject = direct_subject(q)
         for key, value in memory.get("quick_answers", {}).items():
-            if key.lower() in q:
+            if key_matches(key, q, subject):
                 return value
         for fact in memory.get("facts", []):
-            if any(kw.lower() in q for kw in fact.get("keywords", [])):
+            if any(key_matches(kw, q, subject) for kw in fact.get("keywords", [])):
                 return fact.get("answer", "")
         return None
 
@@ -211,10 +314,10 @@ class IntentClassifier:
     PATTERNS = {
         "time":       r"\b(what time|current time|time is it|the time)\b",
         "date":       r"\b(what date|today'?s date|what day|date today)\b",
-        "weather":    r"\b(weather|temperature|forecast|outside|how hot|how cold)\b",
+        "weather":    r"\b(weather|temperature|forecast|how hot|how cold)\b",
         "ping_all":   r"\b(network status|all devices|device status|ping all|everything online|what'?s online)\b",
         "ping_one":   r"\b(is .+ online|ping |check .+ status|is .+ up|is .+ running)\b",
-        "system":     r"\b(system status|bmo status|how are you|your temp|cpu temp|your memory)\b",
+        "system":     r"\b(system status|bmo status|your temp|cpu temp|your memory)\b",
         "calculate":  r"\b(calculate|what is \d|compute|math|how much is)\b",
         "memory_add": r"\b(remember that|remember:|save this|store this)\b",
         "memory_list": r"\b(what do you (remember|know)|show memory|list memory|your memory)\b",
@@ -294,7 +397,7 @@ class BMOSkillRouter:
         if intent == "date":
             return self._r("skill", Skills.date_today(), start)
         if intent == "weather":
-            return self._r("skill", Skills.weather(self.config), start)
+            return self._r("skill", Skills.weather(self.config, user_input), start)
         if intent == "ping_all":
             return self._r("skill", Skills.ping_all(self.config), start)
 
@@ -337,6 +440,10 @@ class BMOSkillRouter:
         now = datetime.datetime.now().strftime("%I:%M %p, %A %B %d %Y")
         sys_prompt = f"You are BMO, a helpful home AI assistant for {owner}. Be concise and friendly. Current time: {now}."
         return self._r("spark", self.spark.chat(user_input, sys_prompt), start)
+
+    def normalize(self, user_input):
+        """Fix names that speech to text commonly misspells (see apply_aliases)."""
+        return apply_aliases(user_input, self.memory.get("aliases"))
 
     def try_handle(self, user_input):
         """Skill-only mode: returns a response string if a local skill or memory

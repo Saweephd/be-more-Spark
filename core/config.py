@@ -20,7 +20,8 @@ FAST_LLM_MODEL = "gpt-oss:20b" # Same model, no routing tier needed
 # agent also pings every 10 minutes (keep_model_warm in core/llm.py), so while
 # BMO is switched on the model stays loaded and the 5 second cold start is gone.
 LLM_KEEP_ALIVE = "30m"
-LLM_NUM_CTX = 4096
+# 8192 since the household notes joined the system prompt (they need the room).
+LLM_NUM_CTX = 8192
 VISION_MODEL = "qwen2-vl-instruct:2b" # Legacy Ollama name (unused — VLM runs via HailoRT directly)
 
 # VLM (Vision Language Model) Settings — uses HailoRT Python API directly
@@ -36,7 +37,35 @@ def get_current_context() -> str:
     return f"Now: {now.strftime('%I:%M %p')}, {now.strftime('%A, %B %d, %Y')}"
 
 
+# Private household notes for BMO, kept on the device only (never in the
+# repository; see .gitignore).  When the file exists its text is added to the
+# system prompt so the model can answer questions about the family.
+HOUSEHOLD_FILE = os.path.join(_PROJECT_ROOT, "core", "edge", "bmo_household.md")
+
+
+def get_household_notes() -> str:
+    try:
+        with open(HOUSEHOLD_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def get_system_prompt():
+    notes = get_household_notes()
+    if not notes:
+        return _base_system_prompt()
+    return (
+        _base_system_prompt()
+        + "\n\nHOUSEHOLD NOTES. These are true facts about the people you live with. "
+        "Use them to answer questions about the family, pets, home, trips and projects. "
+        "If something is not in the notes, say you do not know rather than guessing. "
+        "Never read the notes out in full; answer only what was asked, briefly.\n"
+        + notes
+    )
+
+
+def _base_system_prompt():
     # Trimmed to ~450 tokens (was ~1100). take_photo / play_music / display_image
     # are handled by pre-LLM keyword routing in core/llm.py — the model never
     # needs to emit those, so they're not documented here.  Only set_timer and

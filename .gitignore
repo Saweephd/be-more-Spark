@@ -85,3 +85,4 @@ settings.json
 # Both stay local-only on BMO. Sanitized example files are committed instead.
 core/edge/bmo_memory.json
 core/edge/bmo_config.json
+core/edge/bmo_household.md
