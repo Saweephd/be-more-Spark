@@ -27,6 +27,21 @@ def load_pronunciations() -> dict:
     save_pronunciations(default_dict)
     return default_dict
 
+# Device-only pronunciations (family names and the like).  Kept out of the
+# repository; see .gitignore.  Same format as pronunciations.json.
+LOCAL_PRONUNCIATION_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "edge", "bmo_pronunciations.json")
+
+
+def load_local_pronunciations() -> dict:
+    try:
+        with open(LOCAL_PRONUNCIATION_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {str(k).lower(): str(v) for k, v in data.items()}
+    except (OSError, ValueError):
+        return {}
+
+
 def save_pronunciations(pronunciations: dict):
     """Saves the pronunciation dictionary to a JSON file."""
     try:
@@ -108,6 +123,7 @@ def clean_text_for_speech(text: str) -> str:
     
     # Apply pronunciation fixes (case-insensitive)
     pronunciations = load_pronunciations()
+    pronunciations.update(load_local_pronunciations())
     for word, replacement in pronunciations.items():
         # Use regex word boundaries (\b) to ensure we only replace whole words
         pattern = r"\b" + re.escape(word) + r"\b"

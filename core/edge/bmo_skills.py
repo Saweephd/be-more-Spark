@@ -106,7 +106,7 @@ def apply_aliases(text, aliases):
     """Replace the spellings speech to text produces with the real name.
 
     ``aliases`` maps the real spelling to a list of variants, for example
-    {"Mazzee": ["maisie", "mazie"]}.  Whole words only, any letter case."""
+    {"Rexy": ["rexie", "wrecksy"]}.  Whole words only, any letter case."""
     out = str(text)
     for canonical, variants in (aliases or {}).items():
         for variant in sorted(variants, key=len, reverse=True):

@@ -580,7 +580,7 @@ class Brain:
             if not hasattr(self, "_skill_router"):
                 from core.edge.bmo_skills import BMOSkillRouter
                 self._skill_router = BMOSkillRouter()
-            # Correct names speech to text gets wrong ("Maisie" -> "Mazzee")
+            # Correct names speech to text gets wrong (a pet or family name)
             # before either the local skills or the model see the question.
             fixed = self._skill_router.normalize(user_text)
             if fixed != user_text:

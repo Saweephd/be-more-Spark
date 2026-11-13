@@ -37,7 +37,7 @@ class RouteTests(unittest.TestCase):
 
 class MemoryMatchTests(unittest.TestCase):
     MEMORY = {
-        "aliases": {"Mazzee": ["maisie", "mazie", "maisy"], "BMO": ["bimo", "beemo"]},
+        "aliases": {"Rexy": ["rexie", "wrecksy", "rexi"], "BMO": ["bimo", "beemo"]},
         "quick_answers": {
             "rose": "ROSE", "work": "WORK", "van": "VAN", "dog": "DOG",
             "wifi password": "WIFI", "team size": "TEAM",
@@ -75,9 +75,9 @@ class MemoryMatchTests(unittest.TestCase):
     def test_aliases_fix_speech_to_text_spellings(self):
         from core.edge.bmo_skills import apply_aliases
         a = self.MEMORY["aliases"]
-        self.assertEqual(apply_aliases("What if someone hurt Maisie?", a), "What if someone hurt Mazzee?")
-        self.assertEqual(apply_aliases("hey bimo, where is MAZIE", a), "hey BMO, where is Mazzee")
-        self.assertEqual(apply_aliases("the maisies are out", a), "the maisies are out")
+        self.assertEqual(apply_aliases("What if someone hurt Rexie?", a), "What if someone hurt Rexy?")
+        self.assertEqual(apply_aliases("hey bimo, where is WRECKSY", a), "hey BMO, where is Rexy")
+        self.assertEqual(apply_aliases("the rexies are out", a), "the rexies are out")
         self.assertEqual(apply_aliases("no names here", None), "no names here")
 
     def test_household_notes_reach_the_system_prompt_only_when_present(self):
@@ -93,6 +93,22 @@ class MemoryMatchTests(unittest.TestCase):
         self.assertIn("HOUSEHOLD NOTES", prompt)
         self.assertIn("Testdog", prompt)
         self.assertTrue(prompt.startswith("You are BMO"))
+
+
+class LocalPronunciationTests(unittest.TestCase):
+    def test_device_only_pronunciations_are_applied(self):
+        import json
+        from unittest import mock
+        import core.tts as tts
+        path = tempfile.mktemp(suffix=".json")
+        with open(path, "w") as f:
+            json.dump({"Testdog": "tess dawg"}, f)
+        with mock.patch.object(tts, "LOCAL_PRONUNCIATION_FILE", path), \
+             mock.patch.object(tts, "load_pronunciations", return_value={}):
+            self.assertEqual(tts.clean_text_for_speech("Where is Testdog today"), "Where is tess dawg today")
+        with mock.patch.object(tts, "LOCAL_PRONUNCIATION_FILE", "/nonexistent.json"), \
+             mock.patch.object(tts, "load_pronunciations", return_value={}):
+            self.assertEqual(tts.clean_text_for_speech("Where is Testdog"), "Where is Testdog")
 
 
 class WeatherTests(unittest.TestCase):
