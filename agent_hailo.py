@@ -792,6 +792,10 @@ class BotGUI:
 
         self.mouth_open = 0  # Reset
         print(f"[REC] {detector.summary()}")
+        # Close the microphone while BMO thinks and speaks; the wake loop opens
+        # a fresh stream afterwards.  Left open through a long spoken reply the
+        # stream piled up overflows and then stalled (seen twice, 12 Nov 2026).
+        self._reset_mic()
         if not frames or not detector.heard_speech:
             return None
         data = np.concatenate(frames)
