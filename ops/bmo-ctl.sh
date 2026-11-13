@@ -1,11 +1,12 @@
 #!/bin/bash
 # bmo-ctl.sh: operate and test the BMO agent on the Raspberry Pi.
-# Version 1.0.0
+# Version 1.0.1
 #
 # Changelog
 #   1.0.0  2026-11-12  First version: status, deploy, rollback, service control,
 #                      logs, and the remote test commands (ask, say, listen,
 #                      selftest).
+#   1.0.1  2026-11-12  logs: read the journal by unit field so it works over SSH.
 #
 # Runs as the normal user; nothing here needs root.  No secrets live in this file.
 set -uo pipefail
@@ -136,7 +137,8 @@ cmd_rollback() {
 cmd_logs() {
     local n="${1:-60}"
     case "$n" in ''|*[!0-9]*) echo "logs: line count must be a number"; exit 2;; esac
-    journalctl --user -u "$UNIT" -n "$n" --no-pager -o cat
+    # Matching on the unit field works over SSH; "journalctl --user -u" returns nothing there.
+    journalctl _SYSTEMD_USER_UNIT="$UNIT" -n "$n" --no-pager -o cat | grep -v "onnxruntime:Default, device_discovery"
 }
 
 cmd_listen() {
