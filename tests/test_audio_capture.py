@@ -38,7 +38,7 @@ class EndpointDetectorTests(unittest.TestCase):
         stopped = run(d, levels)
         self.assertEqual(d.reason, "end_of_speech")
         # Must run past the second phrase: 400 + 800 + 500 + 800 = 2500 ms.
-        self.assertGreater(stopped, 2500 + 800)
+        self.assertGreater(stopped, 2500 + 700)
         self.assertLess(stopped, 2500 + 1100)
         self.assertTrue(d.heard_speech)
 

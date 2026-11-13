@@ -113,8 +113,16 @@ class FallbackTests(unittest.TestCase):
             w.writeframes(b"\x00\x00" * 1600)
         with mock.patch.object(stt, "STT_REMOTE", "127.0.0.1:1"), \
              mock.patch.object(stt, "transcribe_local", return_value="local answer") as local:
+            stt._remote_retry_at = 0.0
             self.assertEqual(stt.transcribe_audio(path), "local answer")
             local.assert_called_once()
+            # The failure is remembered: the next request skips the network
+            # service instead of waiting for it to time out again.
+            self.assertGreater(stt._remote_retry_at, 0)
+            with mock.patch("core.stt_remote.transcribe_wav") as remote:
+                self.assertEqual(stt.transcribe_audio(path), "local answer")
+                remote.assert_not_called()
+        stt._remote_retry_at = 0.0
 
     def test_remote_text_is_cleaned(self):
         import core.stt as stt

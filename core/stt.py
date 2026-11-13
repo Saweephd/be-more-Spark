@@ -6,6 +6,11 @@ from .config import WHISPER_CMD, WHISPER_MODEL, STT_REMOTE
 
 logger = logging.getLogger(__name__)
 
+# After a failed attempt the network service is skipped until this time.
+REMOTE_RETRY_AFTER_S = 300
+_remote_retry_at = 0.0
+
+
 def clean_transcript(output: str) -> str:
     """Tidy a raw transcript and drop the text Whisper invents from silence."""
     # Remove timestamps like [00:00:00.000 --> 00:00:02.000] or [BLANK_AUDIO]
@@ -39,8 +44,9 @@ def transcribe_audio(audio_filepath: str) -> str:
         logger.error(f"Audio file not found: {audio_filepath}")
         return ""
 
-    if STT_REMOTE:
-        import time
+    global _remote_retry_at
+    import time
+    if STT_REMOTE and time.time() >= _remote_retry_at:
         start = time.time()
         try:
             from .stt_remote import transcribe_wav
@@ -48,7 +54,11 @@ def transcribe_audio(audio_filepath: str) -> str:
             print(f"[STT] remote ({STT_REMOTE}) {time.time() - start:.2f}s")
             return clean_transcript(text)
         except Exception as e:
-            print(f"[STT] remote failed after {time.time() - start:.2f}s ({e}); using local Whisper")
+            # Do not pay the connection timeout on every request while the
+            # service is down: use the Pi's Whisper for a while, then try again.
+            _remote_retry_at = time.time() + REMOTE_RETRY_AFTER_S
+            print(f"[STT] remote failed after {time.time() - start:.2f}s ({e}); "
+                  f"using local Whisper for the next {REMOTE_RETRY_AFTER_S // 60} minutes")
 
     return transcribe_local(audio_filepath)
 

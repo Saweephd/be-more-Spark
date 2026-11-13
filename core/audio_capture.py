@@ -119,7 +119,7 @@ class EndpointDetector:
         min_speech_rms: float = 400.0,
         start_blocks: int = 2,
         min_speech_ms: float = 250.0,
-        end_silence_ms: float = 900.0,
+        end_silence_ms: float = 800.0,
         start_timeout_ms: float = 5000.0,
         max_ms: float = 15000.0,
         grace_ms: float = 240.0,
