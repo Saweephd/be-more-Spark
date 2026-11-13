@@ -1,12 +1,13 @@
 #!/bin/bash
 # bmo-ctl.sh: operate and test the BMO agent on the Raspberry Pi.
-# Version 1.0.1
+# Version 1.1.0
 #
 # Changelog
 #   1.0.0  2026-11-12  First version: status, deploy, rollback, service control,
 #                      logs, and the remote test commands (ask, say, listen,
 #                      selftest).
 #   1.0.1  2026-11-12  logs: read the journal by unit field so it works over SSH.
+#   1.1.0  2026-11-12  stt command; selftest checks the speech to text service.
 #
 # Runs as the normal user; nothing here needs root.  No secrets live in this file.
 set -uo pipefail
@@ -39,6 +40,8 @@ Usage: bmo-ctl.sh <command> [arguments]
   listen [seconds] [--transcribe]
                          Record from the microphone, report levels and what the
                          end-of-speech detector decided; optionally transcribe
+  stt [file.wav]         Time speech to text on the network service and on the Pi
+                         (default file: the last recorded request)
   selftest [--audio]     Run the checks; --audio also plays a short phrase
   help                   This text
 USAGE
@@ -176,7 +179,8 @@ cmd_selftest() {
     check "speaker found"      sh -c "aplay -l | grep -q UACDemo"
     check "camera found"       sh -c "rpicam-hello --list-cameras 2>&1 | grep -q '^0 :'"
     check "hailo device"       test -e /dev/hailo0
-    check "capture logic"      runpy -m unittest -q tests.test_audio_capture tests.test_edge_route
+    check "capture logic"      runpy -m unittest -q tests.test_audio_capture tests.test_edge_route tests.test_stt_remote
+    check "speech to text service" runpy -c 'import socket; from core import config; from core.stt_remote import parse_address; socket.create_connection(parse_address(config.STT_REMOTE), timeout=2).close(); print(config.STT_REMOTE)'
     check "ask: edge route"    runpy ops/bmo_ask.py --expect edge "what time is it"
     check "ask: spark route"   runpy ops/bmo_ask.py --expect spark "what is the capital of Peru"
     if [ $audio = 1 ]; then
@@ -207,6 +211,7 @@ main() {
         ask)             [ -n "${1:-}" ] || { echo 'ask: give a question in quotes'; exit 2; }; runpy ops/bmo_ask.py "$*";;
         say)             [ -n "${1:-}" ] || { echo 'say: give text in quotes'; exit 2; }; runpy ops/bmo_say.py "$*";;
         listen)          cmd_listen "$@";;
+        stt)             runpy ops/bmo_stt.py "$@" 2>&1 | grep -v '^\[CONFIG\]';;
         selftest)        cmd_selftest "$@";;
         help|-h|--help)  usage;;
         *)               echo "unknown command: $cmd"; usage; exit 2;;

@@ -16,6 +16,11 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LLM_URL = "http://192.168.1.2:11434/api/chat"
 LLM_MODEL = "gpt-oss:20b" # GPU-accelerated chat brain on DGX Spark 1
 FAST_LLM_MODEL = "gpt-oss:20b" # Same model, no routing tier needed
+# How long the Spark keeps the model in memory after BMO's last request.  The
+# agent also pings every 10 minutes (keep_model_warm in core/llm.py), so while
+# BMO is switched on the model stays loaded and the 5 second cold start is gone.
+LLM_KEEP_ALIVE = "30m"
+LLM_NUM_CTX = 4096
 VISION_MODEL = "qwen2-vl-instruct:2b" # Legacy Ollama name (unused — VLM runs via HailoRT directly)
 
 # VLM (Vision Language Model) Settings — uses HailoRT Python API directly
@@ -74,6 +79,12 @@ else:
 # setup.sh downloads ggml-base.en.bin — keep this in sync with that filename.
 WHISPER_CMD = os.path.join(_PROJECT_ROOT, "whisper.cpp", "build", "bin", "whisper-cli")
 WHISPER_MODEL = os.path.join(_PROJECT_ROOT, "models", "ggml-base.en.bin")
+
+# Speech to text over the network (Wyoming protocol, see core/stt_remote.py).
+# The faster-whisper service on CIOspark2 that also serves the Jarvis voice
+# device.  Set BMO_STT_REMOTE="" in the environment (or here) to use only the
+# Pi's own Whisper; BMO falls back to it by itself when this is unreachable.
+STT_REMOTE = os.environ.get("BMO_STT_REMOTE", "192.168.1.30:10300")
 
 # Audio Settings
 

@@ -35,7 +35,7 @@ import scipy.signal
 from openwakeword.model import Model
 
 # Import unified core modules
-from core.llm import Brain, extract_json_object, strip_prompt_leakage
+from core.llm import Brain, extract_json_object, strip_prompt_leakage, keep_model_warm
 from core.tts import play_audio_on_hardware
 from core.stt import transcribe_audio
 from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE_WORD_THRESHOLD, ALSA_DEVICE, VOLUME
@@ -224,6 +224,7 @@ class BotGUI:
         # Start Screensaver Audio Thread
         self.last_screensaver_audio_time = time.time()
         threading.Thread(target=self.screensaver_audio_loop, daemon=True).start()
+        threading.Thread(target=self._keep_model_warm_loop, daemon=True).start()
 
         # Pre-warm the VLM (Hailo NPU) so the first "what is this?" doesn't
         # eat a ~3 s init tax mid-conversation.  Best-effort only.
@@ -234,6 +235,17 @@ class BotGUI:
             except Exception as e:
                 print(f"[VLM] Warmup skipped: {e}")
         # DISABLED: warmup leaks /dev/hailo0 FDs and blocks hailo-ollama. # threading.Thread(target=_warmup_vlm, daemon=True).start()
+
+    def _keep_model_warm_loop(self):
+        """Keep the chat model loaded on the Spark while BMO is switched on."""
+        while not self.stop_event.is_set():
+            took = keep_model_warm()
+            if took is None:
+                print("[LLM] Keep-warm: Spark not reachable.")
+            elif took > 1.5:
+                print(f"[LLM] Keep-warm: model was cold, loaded in {took:.1f}s.")
+            if self.stop_event.wait(timeout=600):
+                break
 
     def exit_fullscreen(self, event=None):
         # Signal all background threads to wind down before tearing the UI.

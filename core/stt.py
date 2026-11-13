@@ -2,20 +2,59 @@ import subprocess
 import logging
 import os
 import re
-from .config import WHISPER_CMD, WHISPER_MODEL
+from .config import WHISPER_CMD, WHISPER_MODEL, STT_REMOTE
 
 logger = logging.getLogger(__name__)
 
+def clean_transcript(output: str) -> str:
+    """Tidy a raw transcript and drop the text Whisper invents from silence."""
+    # Remove timestamps like [00:00:00.000 --> 00:00:02.000] or [BLANK_AUDIO]
+    output = re.sub(r'\[.*?\]', '', output).strip()
+
+    # Fix capitalization of BMO
+    output = re.sub(r'\b[Bb]emo\b', 'BMO', output)
+    output = re.sub(r'\b[Bb]eemo\b', 'BMO', output)
+
+    lowered = output.lower()
+    hallucinations = [
+        "[silence]", "(silence)", "you", "thanks for watching!",
+        "[blank_audio]", "thank you.", "thank you", "thanks.",
+    ]
+    # Whisper often invents sound descriptions from silence or ambient audio,
+    # e.g. "(eerie music)".  Reject output that is entirely inside brackets.
+    is_parenthetical = bool(re.match(r'^\s*[\(\[].*[\)\]]\s*$', output.strip()))
+    if is_parenthetical or lowered in hallucinations or not re.search(r'[a-zA-Z0-9]', lowered):
+        logger.info(f"Whisper hallucination filtered: {repr(output)}")
+        return ""
+    return output
+
+
 def transcribe_audio(audio_filepath: str) -> str:
-    """
-    Run whisper.cpp on a 16 kHz mono WAV file produced by record_audio().
-    The recording side now down-samples in NumPy, so the ffmpeg pre-conversion
-    step has been removed (saves ~50–150 ms per turn on Pi 5 SD storage).
-    """
-    if not os.path.exists(audio_filepath):
+    """Transcribe a 16 kHz mono WAV file produced by record_audio().
+
+    Tries the speech to text service on the home network first (STT_REMOTE in
+    core/config.py); if that is switched off or unreachable, runs whisper.cpp
+    on the Pi as before."""
+    if not audio_filepath or not os.path.exists(audio_filepath):
         logger.error(f"Audio file not found: {audio_filepath}")
         return ""
 
+    if STT_REMOTE:
+        import time
+        start = time.time()
+        try:
+            from .stt_remote import transcribe_wav
+            text = transcribe_wav(audio_filepath, STT_REMOTE)
+            print(f"[STT] remote ({STT_REMOTE}) {time.time() - start:.2f}s")
+            return clean_transcript(text)
+        except Exception as e:
+            print(f"[STT] remote failed after {time.time() - start:.2f}s ({e}); using local Whisper")
+
+    return transcribe_local(audio_filepath)
+
+
+def transcribe_local(audio_filepath: str) -> str:
+    """Run whisper.cpp on the Pi's own processor."""
     try:
         # Run whisper.cpp directly on the 16 kHz WAV.
         # -nt  no timestamps (we strip them anyway, skip the compute)
@@ -32,32 +71,7 @@ def transcribe_audio(audio_filepath: str) -> str:
             logger.error(f"Whisper CPU process failed with exit code {e.returncode}")
             return ""
 
-        # 3. Clean up output (remove timestamps like [00:00:00.000 --> 00:00:02.000] or [BLANK_AUDIO])
-        output = re.sub(r'\[.*?\]', '', output).strip()
-
-        # Fix capitalization of BMO
-        output = re.sub(r'\b[Bb]emo\b', 'BMO', output)
-        output = re.sub(r'\b[Bb]eemo\b', 'BMO', output)
-        
-        # Clean hallucinated whispers from silence
-        lowered = output.lower()
-        hallucinations = [
-            "[silence]", "(silence)", "you", "thanks for watching!", 
-            "[blank_audio]", "thank you.", "thank you", "thanks."
-        ]
-        
-        # Whisper often hallucinates sound descriptions when mic picks up silence or
-        # ambient audio — e.g. "(eerie music)", "(background music)", "[SOUND]".
-        # Reject any output that is entirely inside parentheses or brackets.
-        is_parenthetical = bool(re.match(r'^\s*[\(\[].*[\)\]]\s*$', output.strip()))
-        
-        # If output is purely punctuation/noise (no letters or numbers) or a known hallucination
-        if is_parenthetical or lowered in hallucinations or not re.search(r'[a-zA-Z0-9]', lowered):
-            logger.info(f"Whisper hallucination filtered: {repr(output)}")
-            return ""
-
-        return output
-
+        return clean_transcript(output)
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Whisper CPU process failed: {e}")

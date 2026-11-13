@@ -6,7 +6,8 @@ import re
 import json
 import urllib.parse
 import numpy as np
-from .config import LLM_URL, LLM_MODEL, FAST_LLM_MODEL, VISION_MODEL, VLM_HEF_PATH, get_system_prompt, get_current_context
+from .config import (LLM_URL, LLM_MODEL, FAST_LLM_MODEL, VISION_MODEL, VLM_HEF_PATH, LLM_KEEP_ALIVE,
+                     LLM_NUM_CTX, get_system_prompt, get_current_context)
 from .tts import add_pronunciation
 from .search import search_web, search_images
 
@@ -179,6 +180,28 @@ def strip_prompt_leakage(content: str) -> str:
     # 5. Collapse runs of blank lines / leading-trailing whitespace
     content = re.sub(r'\n{3,}', '\n\n', content).strip()
     return content
+
+
+def keep_model_warm(timeout: float = 90.0) -> float | None:
+    """Ask the Spark to load the chat model (or keep it loaded).
+
+    An empty message list makes Ollama load the model and return at once.  The
+    context size must match the one real requests use, or Ollama would reload
+    the model when the first real question arrives.  Returns the seconds it
+    took, or None if the Spark could not be reached."""
+    import time as _t
+    start = _t.time()
+    try:
+        r = requests.post(LLM_URL, json={
+            "model": LLM_MODEL, "messages": [], "stream": False,
+            "keep_alive": LLM_KEEP_ALIVE, "options": {"num_ctx": LLM_NUM_CTX},
+        }, timeout=timeout)
+        if r.status_code == 200:
+            return _t.time() - start
+        logger.warning(f"keep_model_warm: HTTP {r.status_code}")
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"keep_model_warm: {e}")
+    return None
 
 
 MEMORY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory.json")
@@ -424,8 +447,9 @@ class Brain:
             "options": {
                 "temperature": 0.7,
                 "num_predict": 1024,  # increased to prevent responses getting cut off
-                "num_ctx": 4096,
+                "num_ctx": LLM_NUM_CTX,
             },
+            "keep_alive": LLM_KEEP_ALIVE,
             "think": "low",  # gpt-oss reasoning effort: cuts thinking-mode preamble
 
         }
@@ -668,8 +692,9 @@ class Brain:
             "options": {
                 "temperature": 0.7,
                 "num_predict": 1024,  # Increased to prevent responses getting cut off
-                "num_ctx": 4096,      # Ensure context window is large enough
+                "num_ctx": LLM_NUM_CTX,      # Ensure context window is large enough
             },
+            "keep_alive": LLM_KEEP_ALIVE,
             "think": "low",  # gpt-oss reasoning effort
         }
 
