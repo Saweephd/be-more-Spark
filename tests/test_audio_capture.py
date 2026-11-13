@@ -93,8 +93,17 @@ class EndpointDetectorTests(unittest.TestCase):
         quiet = EndpointDetector(noise_rms=100)
         noisy = EndpointDetector(noise_rms=600)
         self.assertEqual(quiet.speech_threshold, 400)      # floor
-        self.assertEqual(noisy.speech_threshold, 1800)     # 3 x noise
-        self.assertLess(noisy.silence_threshold, noisy.speech_threshold)
+        self.assertEqual(noisy.speech_threshold, 1500)     # 2.5 x noise
+
+    def test_noisy_room_still_ends_promptly(self):
+        # First spoken test on BMO: with room noise hovering just under the
+        # speech level, the recording ran 5.3 s for a one second question.
+        d = EndpointDetector(noise_rms=530)
+        hover = d.speech_threshold * 0.85
+        levels = [hover] * blocks(400) + [3200.0] * blocks(1000) + [hover] * blocks(4000)
+        stopped = run(d, levels)
+        self.assertEqual(d.reason, "end_of_speech")
+        self.assertLess(stopped, 400 + 1000 + 1000)
 
     def test_timing_does_not_depend_on_block_length(self):
         # Same audio in 10 ms blocks must give the same decision as 80 ms blocks.
@@ -152,6 +161,26 @@ class NoiseFloorTests(unittest.TestCase):
         self.assertEqual(block_rms(np.zeros(10, dtype=np.int16)), 0.0)
         self.assertAlmostEqual(block_rms(np.full(10, 100, dtype=np.int16)), 100.0)
         self.assertEqual(block_rms(np.array([], dtype=np.int16)), 0.0)
+
+
+class MicStreamCloseTests(unittest.TestCase):
+    def test_close_does_not_hang_on_a_stuck_stream(self):
+        import threading
+        import time
+        from core.audio_capture import MicStream
+
+        class Stuck:
+            def abort(self):
+                threading.Event().wait(30)   # never returns in time
+            def close(self):
+                pass
+
+        mic = MicStream(device=None)
+        mic._stream = Stuck()
+        start = time.time()
+        mic.close(timeout=0.3)
+        self.assertLess(time.time() - start, 1.5)
+        self.assertFalse(mic.running)
 
 
 if __name__ == "__main__":

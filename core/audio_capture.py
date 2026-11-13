@@ -15,6 +15,9 @@ Three pieces, kept free of GUI code so they can be unit tested:
 
 Changelog
   1.0.0  2026-11-12  First version (pack 1: recording reliability).
+  1.0.1  2026-11-12  After the first spoken test: close() can no longer hang,
+                     closing silence counts every block below the speech level,
+                     speech level lowered from 3x to 2.5x the room noise.
 """
 
 from __future__ import annotations
@@ -112,9 +115,8 @@ class EndpointDetector:
         self,
         noise_rms: float = 150.0,
         block_ms: float = BLOCK_MS,
-        speech_factor: float = 3.0,
+        speech_factor: float = 2.5,
         min_speech_rms: float = 400.0,
-        silence_ratio: float = 0.6,
         start_blocks: int = 2,
         min_speech_ms: float = 250.0,
         end_silence_ms: float = 900.0,
@@ -126,8 +128,7 @@ class EndpointDetector:
         self.noise_rms = float(noise_rms)
         # A block counts as speech when it is clearly above the room noise.
         self.speech_threshold = max(self.noise_rms * speech_factor, min_speech_rms)
-        # ...and as silence only when it falls well back below that (hysteresis).
-        self.silence_threshold = self.speech_threshold * silence_ratio
+        self.silence_threshold = self.speech_threshold  # kept for reporting
         self.start_blocks = int(start_blocks)
         self.min_speech_ms = float(min_speech_ms)
         self.end_silence_ms = float(end_silence_ms)
@@ -167,7 +168,10 @@ class EndpointDetector:
         else:
             self._loud_run = 0
             self.quiet_since_ms += self.block_ms
-            if self.speaking and rms < self.silence_threshold:
+            if self.speaking:
+                # Anything below the speech level counts toward the closing
+                # silence.  (Requiring it to fall further, to a lower "silence"
+                # level, left BMO listening for seconds in a noisy room.)
                 self.silence_run_ms += self.block_ms
                 if self.silence_run_ms >= self.end_silence_ms:
                     if self.heard_speech:
@@ -241,14 +245,26 @@ class MicStream:
         with self._cond:
             self._queue.clear()
 
-    def close(self) -> None:
+    def close(self, timeout: float = 2.0) -> None:
+        """Shut the stream down without ever blocking the caller for long.
+
+        A stalled USB microphone can make PortAudio's stop/close hang forever
+        (seen on BMO, 12 Nov 2026: the wake loop froze inside close()).  So the
+        shutdown runs in a helper thread, uses abort (no draining), and is
+        abandoned if it has not finished after ``timeout`` seconds."""
         stream, self._stream = self._stream, None
         if stream is not None:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception:
-                pass
+            def _shutdown():
+                try:
+                    stream.abort()
+                    stream.close()
+                except Exception:
+                    pass
+            t = threading.Thread(target=_shutdown, daemon=True)
+            t.start()
+            t.join(timeout)
+            if t.is_alive():
+                print("[MIC] Stream did not close in time; abandoning it.")
         self.flush()
 
     @property

@@ -676,7 +676,6 @@ class BotGUI:
         while not self.stop_event.is_set():
             try:
                 mic = self._get_mic()
-                retry_count = 0  # Reset on success
                 last_data_time = time.time()
                 # Start clean: whatever queued up while BMO was answering is
                 # BMO's own voice, and must not be able to wake it again.
@@ -706,10 +705,16 @@ class BotGUI:
                         continue
 
                     if block is None:
-                        if time.time() - last_data_time > 10.0:
-                            raise RuntimeError("microphone stopped delivering audio")
+                        if time.time() - last_data_time > 3.0:
+                            raise RuntimeError(
+                                f"microphone stopped delivering audio (overflows so far: {mic.overflows})")
                         continue
                     last_data_time = time.time()
+                    if retry_count:
+                        print("[EARS] Microphone is delivering audio again.")
+                        retry_count = 0
+                        if self.current_state == BotStates.ERROR:
+                            self.set_state(BotStates.IDLE, "Tap to speak")
 
                     self._noise_floor.add(block_rms(block))
                     audio_16k = self._decimator.process(block)
@@ -729,11 +734,16 @@ class BotGUI:
                 print(f"[EARS] Audio Input Error (Attempt {retry_count}): {e}")
                 self._reset_mic()
                 self.set_state(BotStates.ERROR, "Mic Error")
-                if retry_count > 5:
-                    print("[EARS] Too many mic errors, restarting audio system...")
-                    if self.stop_event.wait(timeout=5):
-                        return False
-                    retry_count = 0
+                if retry_count >= 4:
+                    # Reopening the stream is not helping.  Leave, and let the
+                    # service manager start a fresh process (about 10 s), which
+                    # is the only thing that reliably clears a stuck sound device.
+                    print("[EARS] Microphone will not recover; exiting so the service restarts BMO.")
+                    try:
+                        self.brain.save_history(force=True)
+                    except Exception:
+                        pass
+                    os._exit(3)
                 if self.stop_event.wait(timeout=2):
                     return False
                 # Try to go back to IDLE if we were in ERROR
