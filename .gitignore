@@ -40,7 +40,6 @@ chat_memory.json
 *.png
 !favicon.png
 !faces/**/*.png
-!sounds/music/*.wav
 # Keep the generated BMO voice greetings and thinking sounds
 !sounds/greeting_sounds/*.wav
 !sounds/thinking_sounds/*.wav
@@ -87,3 +86,20 @@ core/edge/bmo_memory.json
 core/edge/bmo_config.json
 core/edge/bmo_household.md
 core/edge/bmo_pronunciations.json
+
+# --- BMO finalization (Nov 2026) ---
+# The test suite lives in tests/ and IS tracked (the test_*.py rule above is for stray scripts)
+!tests/
+!tests/test_*.py
+
+# Personal music and slideshow pictures stay on the device only
+sounds/music/*
+!sounds/music/.gitkeep
+core/music/library.json
+slides/
+
+# Game high scores
+core/games/scores.json
+
+# Firmware build output
+firmware/**/build/
