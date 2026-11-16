@@ -151,23 +151,40 @@ class GameTests(unittest.TestCase):
         self.assertLessEqual(game.x + 52, common.W)
 
     # ----- Angry Poppa -----
-    def quiet_poppa(self):
+    def quiet_poppa(self, stage=0):
         game, inp = self.start(angry_poppa)
+        if stage:
+            game.level_index = stage
+            game.load_level()
         game.gnats = []
         for p in game.pots:
             p["timer"] = 1e9
         return game, inp
 
+    def still_gnat(self, game, dx, dy, kind="gnat"):
+        g = game.new_gnat(game.x + dx, game.y + dy, kind=kind)
+        g["speed"] = 0
+        return g
+
     def test_swatter_kills_a_gnat_in_reach_only(self):
         game, inp = self.quiet_poppa()
-        near = game.new_gnat(game.x + 18, game.y - 24)
-        far = game.new_gnat(game.x + 120, game.y - 24)
+        near, far = self.still_gnat(game, 20, -30), self.still_gnat(game, 130, -30)
         game.gnats = [near, far]
-        near["speed"] = far["speed"] = 0
         press(game, inp, "a")
         self.assertNotIn(near, game.gnats)
         self.assertIn(far, game.gnats)
         self.assertEqual(game.score, 10)
+
+    def test_fat_gnat_takes_two_swats(self):
+        game, inp = self.quiet_poppa()
+        fat = self.still_gnat(game, 20, -30, kind="fat")
+        game.gnats = [fat]
+        press(game, inp, "a")
+        self.assertIn(fat, game.gnats)
+        press(game, inp, frames=25)
+        press(game, inp, "a")
+        self.assertNotIn(fat, game.gnats)
+        self.assertEqual(game.score, 30)
 
     def test_spray_uses_pressure_and_pump_restores_it(self):
         game, inp = self.quiet_poppa()
@@ -185,8 +202,7 @@ class GameTests(unittest.TestCase):
 
     def test_spray_reaches_a_distant_gnat(self):
         game, inp = self.quiet_poppa()
-        g = game.new_gnat(game.x + 70, game.y - 36)
-        g["speed"] = 0
+        g = self.still_gnat(game, 70, -36)
         game.gnats = [g]
         press(game, inp, "b")
         press(game, inp, frames=40)
@@ -194,7 +210,7 @@ class GameTests(unittest.TestCase):
 
     def test_gnat_touch_costs_a_heart(self):
         game, inp = self.quiet_poppa()
-        game.gnats = [game.new_gnat(game.x, game.y - 20)]
+        game.gnats = [self.still_gnat(game, 0, -20)]
         press(game, inp, frames=3)
         self.assertEqual(game.hearts, 3)
         self.assertGreater(game.invuln, 0)
@@ -212,19 +228,55 @@ class GameTests(unittest.TestCase):
         press(game, inp, frames=2)
         self.assertEqual(sum(game.up.values()), 1)
 
-    def test_clearing_every_pot_opens_the_door_and_finishes(self):
+    def test_clearing_every_pot_opens_the_stairs_to_the_next_floor(self):
         game, inp = self.quiet_poppa()
+        game.x = game.level["door"]
+        press(game, inp, frames=2)
+        self.assertEqual(game.level_index, 0, "stairs must stay shut while pots remain")
         for p in game.pots:
-            game.hurt_pot(p, 3)
+            game.hurt_pot(p, 9)
+        press(game, inp, frames=2)
+        self.assertEqual(game.level_index, 1)
+        self.assertEqual(game.state, "play")
+        self.assertEqual(game.level["name"], "Second floor")
+        self.assertEqual(game.hearts, 5)
+
+    def test_last_stage_needs_the_queen_beaten_too(self):
+        game, inp = self.quiet_poppa(stage=len(angry_poppa.STAGES) - 1)
+        self.assertIsNotNone(game.queen)
+        game.queen["spawn"] = 1e9
+        for p in game.pots:
+            game.hurt_pot(p, 9)
+        game.x = game.level["start"]
+        press(game, inp, frames=2)
+        self.assertFalse(game.cleared)
+        game.hurt_queen(999)
         press(game, inp, frames=2)
         self.assertTrue(game.cleared)
-        game.x = game.level["door"] - 2
+        game.x = game.level["door"]
         press(game, inp, frames=2)
         self.assertEqual(game.state, "over")
         self.assertTrue(game.win)
-        self.assertGreaterEqual(game.last_score, 1000)
 
-    def test_can_stand_on_a_counter(self):
+    def test_every_stage_builds_and_gets_harder(self):
+        last = None
+        for i, st in enumerate(angry_poppa.STAGES):
+            lv = angry_poppa.build_stage(i)
+            self.assertEqual(len(lv["pots"]), st["pots"])
+            self.assertGreater(lv["width"], 1200)
+            self.assertGreaterEqual(len(lv["rooms"]), 4)
+            for x, y in lv["pots"]:
+                self.assertTrue(0 < x < lv["width"])
+                self.assertGreater(abs(x - lv["start"]), 100)
+                self.assertTrue(y == angry_poppa.FLOOR or any(px <= x <= px + pw and py == y for px, py, pw in lv["platforms"]))
+            self.assertEqual(angry_poppa.build_stage(i)["pots"], lv["pots"], "stage layout must be the same every time")
+            if last:
+                self.assertGreater(st["speed"], last["speed"])
+                self.assertGreaterEqual(st["pot_hp"], last["pot_hp"])
+            last = st
+        self.assertEqual([s["direction"] for s in angry_poppa.STAGES], [1, 1, 1, -1, -1])
+
+    def test_can_stand_on_furniture(self):
         game, inp = self.quiet_poppa()
         px, py, pw = game.level["platforms"][0]
         game.x, game.y, game.vy = px + pw / 2, py - 30.0, 0.0
