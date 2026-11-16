@@ -185,7 +185,7 @@ class GameTests(unittest.TestCase):
 
     def test_spray_reaches_a_distant_gnat(self):
         game, inp = self.quiet_poppa()
-        g = game.new_gnat(game.x + 70, game.y - 24)
+        g = game.new_gnat(game.x + 70, game.y - 36)
         g["speed"] = 0
         game.gnats = [g]
         press(game, inp, "b")

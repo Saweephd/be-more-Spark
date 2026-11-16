@@ -32,26 +32,36 @@ HERO_PAL = {"H": (24, 20, 20), "S": (124, 80, 52), "s": (96, 60, 40), "E": (245,
             "J": (34, 38, 60), "j": (58, 64, 98), "W": (240, 240, 244), "T": (190, 40, 50),
             "K": (14, 14, 18)}
 _TOP = [
-    "....HHHHH...",
-    "...HHHHHHH..",
-    "...HSSSSSS..",
-    "...SSSESSE..",
-    "...SSSSSSS..",
-    "....SSsss...",
-    ".....SSS....",
-    "..JJJWTWJJ..",
-    ".JJJJWTWJJJ.",
-    ".JJJJjTjJJJ.",
-    ".JJJJJTJJJJ.",
-    ".SJJJJJJJJS.",
-    "..JJJJJJJJ..",
-    "..JJJJJJJJ..",
+    "......HHHHHH......",
+    ".....HHHHHHHH.....",
+    "....HHHHHHHHHH....",
+    "....HHSSSSSSSS....",
+    "....HSSSSSSSSS....",
+    "....SSEKSSSEKS....",
+    "....SSSSSSSSSS....",
+    "....SSSSSssSSS....",
+    ".....SSSsssSSS....",
+    ".....SSSSSSSSS....",
+    "......SSSSSSS.....",
+    ".......SSSSS......",
+    "...JJJJWWTTWWJJJ..",
+    "..JJJJJjWTTWjJJJJ.",
+    ".JJJJJJjWTTWjJJJJJ",
+    ".JJJJJJJjTTjJJJJJJ",
+    ".JJJJJJJJTTJJJJJJJ",
+    ".JJJ.JJJJJJJJJ.JJJ",
+    ".JJJ.JJJJJJJJJ.JJJ",
+    ".SSS.JJJJJJJJJ.SSS",
+    ".....JJJJJJJJJ....",
 ]
 _LEGS = {
-    "stand": ["..JJJ..JJJ..", "..JJJ..JJJ..", "..JJJ..JJJ..", "..JJJ..JJJ..", "..KKK..KKKK.", "..KKK..KKKK."],
-    "run1": ["..JJJ..JJJ..", ".JJJ....JJJ.", ".JJJ.....JJJ", "JJJ......JJJ", "KKK......KKK", "KKKK.....KKK"],
-    "run2": ["..JJJJJJJ...", "...JJJJJ....", "...JJJJJ....", "...JJJJJ....", "...KKKKK....", "...KKKKKK..."],
-    "jump": [".JJJ...JJJ..", ".JJJ....JJJ.", ".JJ.....JJJ.", ".KK......KK.", ".KKK.....KKK", "............"],
+    "stand": [".....JJJJ.JJJJ...."] * 7 + ["....KKKKK.KKKKK...", "....KKKKK.KKKKKK.."],
+    "run1": [".....JJJJJJJJJ....", "....JJJJJ.JJJJJ...", "...JJJJJ...JJJJJ..", "...JJJJ.....JJJJ..", "..JJJJ.......JJJJ.",
+             "..JJJJ.......JJJJ.", ".JJJJ.........JJJJ", ".KKKK.........KKKK", ".KKKKK........KKKK"],
+    "run2": [".....JJJJJJJJJ....", "......JJJJJJJ.....", "......JJJJJJJ.....", "......JJJJJJ......", "......JJJJJJ......",
+             "......JJJJJJ......", "......JJJJJJ......", "......KKKKKK......", "......KKKKKKKK...."],
+    "jump": [".....JJJJJJJJJ....", "....JJJJJ.JJJJJ...", "...JJJJJ...JJJJ...", "...JJJJ.....JJJJ..", "...JJJ......JJJJ..",
+             "...KKK.......KKK..", "...KKKK......KKKK.", "..................", ".................."],
 }
 
 ART_PAL = {"k": (16, 16, 20), "w": (220, 226, 236), "W": (245, 248, 252), "g": (70, 160, 70), "G": (40, 110, 54),
@@ -77,12 +87,12 @@ def kitchen():
     return {
         "name": "Kitchen",
         "width": 1500,
-        "platforms": [(150, 162, 210), (440, 162, 120), (640, 150, 90), (800, 162, 260), (1130, 162, 150),
-                      (250, 106, 70), (860, 106, 80), (1160, 106, 70), (560, 60, 60)],
-        "pots": [(300, 162), (690, 150), (930, 162), (1190, 106), (1330, FLOOR)],
+        "platforms": [(150, 172, 210), (440, 172, 120), (640, 160, 90), (800, 172, 260), (1130, 172, 150),
+                      (250, 112, 70), (860, 112, 80), (1160, 112, 70), (560, 56, 60)],
+        "pots": [(300, 172), (690, 160), (930, 172), (1190, 112), (1330, FLOOR)],
         "gnats": [(220, 120), (380, 90), (520, 140), (760, 100), (880, 60), (1010, 130), (1090, 90), (1260, 140), (1400, 110)],
         "swarms": [(600, 100), (1300, 80)],
-        "pickups": [("donut", 276, 96), ("printer", 580, 48), ("soda", 890, 96), ("printer", 1186, 96)],
+        "pickups": [("donut", 276, 100), ("printer", 580, 44), ("soda", 890, 100), ("printer", 1186, 100)],
         "door": 1450,
         "draw": draw_kitchen,
     }
@@ -112,8 +122,8 @@ def draw_kitchen(surf, cam, level):
             pygame.draw.line(surf, (250, 250, 250), (x, 106), (x + 70, 106), 3)
     start = -(cam % 16)
     for x in range(int(start), W, 16):                             # tile backsplash
-        pygame.draw.line(surf, (216, 204, 176), (x, 136), (x, 162))
-    pygame.draw.line(surf, (216, 204, 176), (0, 149), (W, 149))
+        pygame.draw.line(surf, (216, 204, 176), (x, 140), (x, 172))
+    pygame.draw.line(surf, (216, 204, 176), (0, 156), (W, 156))
     fx = 1050 - cam                                                 # fridge
     if -80 < fx < W:
         pygame.draw.rect(surf, (214, 220, 228), (fx, 70, 62, FLOOR - 70))
@@ -123,10 +133,10 @@ def draw_kitchen(surf, cam, level):
         pygame.draw.rect(surf, (120, 128, 140), (fx + 6, 126, 3, 30))
     sx = 610 - cam                                                  # stove
     if -80 < sx < W:
-        pygame.draw.rect(surf, (60, 62, 70), (sx, 164, 70, FLOOR - 164))
-        pygame.draw.rect(surf, (30, 30, 36), (sx + 8, 176, 54, 24))
+        pygame.draw.rect(surf, (60, 62, 70), (sx, 174, 70, FLOOR - 174))
+        pygame.draw.rect(surf, (30, 30, 36), (sx + 8, 184, 54, 18))
         for i in range(4):
-            pygame.draw.circle(surf, (200, 60, 50), (sx + 10 + i * 16, 169), 2)
+            pygame.draw.circle(surf, (200, 60, 50), (sx + 10 + i * 16, 179), 2)
     pygame.draw.rect(surf, (170, 124, 84), (0, FLOOR, W, H - FLOOR))  # floor
     start = -(cam % 40)
     for x in range(int(start), W, 40):
@@ -195,14 +205,14 @@ class AngryPoppa(Game):
 
     @property
     def reach(self):
-        return 26 + 9 * self.up["reach"]
+        return 34 + 10 * self.up["reach"]
 
     def hero_rect(self):
-        return pygame.Rect(int(self.x) - 8, int(self.y) - 38, 16, 38)
+        return pygame.Rect(int(self.x) - 10, int(self.y) - 56, 20, 56)
 
     def swat_rect(self):
         r = self.reach
-        return pygame.Rect(int(self.x) + (4 if self.face > 0 else -4 - r), int(self.y) - 46, r, 44)
+        return pygame.Rect(int(self.x) + (6 if self.face > 0 else -6 - r), int(self.y) - 68, r, 66)
 
     # ---------- update ----------
     def update(self, dt, inp):
@@ -223,7 +233,7 @@ class AngryPoppa(Game):
         if direction:
             self.face = direction
         if "up" in inp.pressed and self.on_ground:
-            self.vy = -335.0
+            self.vy = -365.0
             self.on_ground = False
         old_y = self.y
         self.vy += GRAVITY * dt
@@ -286,7 +296,7 @@ class AngryPoppa(Game):
         for i in range(n):
             ang = (i / (n - 1) - 0.5) * 2 * fan
             v = self.rng.uniform(190, 250)
-            self.puffs.append([self.x + self.face * 12, self.y - 24, self.face * math.cos(ang) * v, math.sin(ang) * v - 10, 0.6])
+            self.puffs.append([self.x + self.face * 18, self.y - 36, self.face * math.cos(ang) * v, math.sin(ang) * v - 10, 0.6])
 
     def hurt_pot(self, p, damage):
         p["hp"] -= damage
@@ -297,7 +307,7 @@ class AngryPoppa(Game):
 
     def update_gnats(self, dt):
         hero = self.hero_rect()
-        hx, hy = self.x, self.y - 24
+        hx, hy = self.x, self.y - 36
         for g in list(self.gnats):
             g["ph"] += dt * 7
             dx, dy = hx - g["x"], hy - g["y"]
@@ -442,21 +452,21 @@ class AngryPoppa(Game):
             key = "stand"
         img = (self.frames if self.face > 0 else self.frames_l)[key]
         hx, hy = int(self.x) - cam, int(self.y)
-        surf.blit(img, (hx - 12, hy - 40 + (2 if self.pump_anim > 0 else 0)))
+        surf.blit(img, (hx - 18, hy - 60 + (2 if self.pump_anim > 0 else 0)))
         f = self.face
-        hand = (hx + f * 11, hy - 20)
+        hand = (hx + f * 16, hy - 30)
         if self.swing > 0:                                   # swatter mid-swing, crackling
-            tip = (hand[0] + f * (self.reach - 6), hand[1] - 14 + int((0.2 - self.swing) * 110))
+            tip = (hand[0] + f * (self.reach - 8), hand[1] - 22 + int((0.2 - self.swing) * 170))
             pygame.draw.line(surf, (60, 60, 70), hand, tip, 2)
-            pygame.draw.ellipse(surf, (250, 220, 80), (tip[0] - 7, tip[1] - 9, 14, 18), 2)
-            pygame.draw.line(surf, (255, 255, 200), (tip[0] - 5, tip[1] - 4), (tip[0] + 5, tip[1] + 4))
-            pygame.draw.line(surf, (255, 255, 200), (tip[0] + 5, tip[1] - 4), (tip[0] - 5, tip[1] + 4))
+            pygame.draw.ellipse(surf, (250, 220, 80), (tip[0] - 9, tip[1] - 12, 18, 24), 2)
+            pygame.draw.line(surf, (255, 255, 200), (tip[0] - 6, tip[1] - 6), (tip[0] + 6, tip[1] + 6))
+            pygame.draw.line(surf, (255, 255, 200), (tip[0] + 6, tip[1] - 6), (tip[0] - 6, tip[1] + 6))
         else:                                                # swatter at rest, held upright
-            pygame.draw.line(surf, (60, 60, 70), hand, (hand[0] + f * 3, hand[1] - 16), 2)
-            pygame.draw.ellipse(surf, (250, 220, 80), (hand[0] + f * 3 - 5, hand[1] - 30, 10, 15), 2)
-        can = (hx - f * 11, hy - 19)                         # spray can in the other hand
-        pygame.draw.rect(surf, (210, 60, 60), (can[0] - 3, can[1] - 3, 6, 10))
-        pygame.draw.rect(surf, (230, 230, 236), (can[0] - 2, can[1] - 6, 4, 3))
+            pygame.draw.line(surf, (60, 60, 70), hand, (hand[0] + f * 4, hand[1] - 22), 2)
+            pygame.draw.ellipse(surf, (250, 220, 80), (hand[0] + f * 4 - 7, hand[1] - 42, 14, 21), 2)
+        can = (hx - f * 16, hy - 28)                         # spray can in the other hand
+        pygame.draw.rect(surf, (210, 60, 60), (can[0] - 4, can[1] - 4, 8, 14))
+        pygame.draw.rect(surf, (230, 230, 236), (can[0] - 2, can[1] - 8, 5, 4))
 
     def draw_hud(self, surf):
         for i in range(self.hearts):
