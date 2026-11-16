@@ -40,6 +40,9 @@ from core.tts import play_audio_on_hardware
 from core.stt import transcribe_audio
 from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE_WORD_THRESHOLD, ALSA_DEVICE, VOLUME
 from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
+from core import extras
+from core.config import (NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
+                         POWEROFF_COMMAND)
 
 # =========================================================================
 # 1. HARDWARE CONFIGURATION
@@ -76,6 +79,7 @@ class BotStates:
     CONFUSED = "confused"
     SHHH = "shhh"
     JAMMING = "jamming"
+    GAME = "game"            # a game is on screen; BMO is neither listening nor idling
     FOOTBALL = "football"
     DETECTIVE = "detective"
     SIR_MANO = "sir_mano"
@@ -209,6 +213,18 @@ class BotGUI:
 
         # Use a master click handler for hot corners and muting
         master.bind('<Button-1>', self.handle_click)
+
+        # Face buttons (the Feather board types these keys; a USB keyboard works too)
+        master.bind('<space>', self.on_key_talk)          # big circle: talk now
+        master.bind('<Shift_L>', self.on_key_cancel)      # triangle: stop / cancel
+        master.bind('<Return>', self.on_key_menu)         # small circle: games menu
+        master.bind('<Up>', lambda e: self.on_key_volume(+0.05))
+        master.bind('<Down>', lambda e: self.on_key_volume(-0.05))
+        self.cancel_event = threading.Event()             # set by the triangle button for the rest of a turn
+        self._game_proc = None
+        self._clock_frame = None                          # night clock overlay, built on first use
+        self._clock_visible = False
+        self._clock_last = None
 
         self.animations = {}
         self.current_frame = 0
@@ -358,6 +374,12 @@ class BotGUI:
         # Any click counts as a user interaction — keeps the watchdog honest
         # regardless of which branch handles the tap.
         self.last_user_interaction = time.time()
+
+        # Night clock showing: the first tap only brings the face back.
+        if self._clock_visible:
+            self.set_state(BotStates.IDLE, "Tap to speak")
+            self._hide_night_clock()
+            return
 
         if self.current_state == BotStates.DISPLAY_IMAGE:
             self.set_state(BotStates.IDLE, "Tap to speak")
@@ -576,7 +598,168 @@ class BotGUI:
         print(f"Loaded animations for: {list(self.animations.keys())}")
         self.tk_img = None
 
+    # ── Night clock ───────────────────────────────────────────────────────────
+    def _update_night_clock(self):
+        """Show a dim red clock in place of the screensaver during the night hours."""
+        want = (self.current_state == BotStates.SCREENSAVER
+                and extras.night_clock_active(None, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR))
+        if not want:
+            if self._clock_visible:
+                self._hide_night_clock()
+            return
+        if self._clock_frame is None:
+            frame = tk.Frame(self.master, bg='black')
+            self._clock_time = tk.Label(frame, text="", fg='#960000', bg='black',
+                                        font=('DejaVu Sans', -210, 'bold'))
+            self._clock_date = tk.Label(frame, text="", fg='#5a0000', bg='black',
+                                        font=('DejaVu Sans', -34, 'bold'))
+            self._clock_time.place(relx=0.5, rely=0.44, anchor=tk.CENTER)
+            self._clock_date.place(relx=0.5, rely=0.88, anchor=tk.CENTER)
+            self._clock_frame = frame
+        shown = extras.clock_text(None, NIGHT_CLOCK_12_HOUR)
+        if shown != self._clock_last:
+            self._clock_time.config(text=shown[0])
+            self._clock_date.config(text=shown[1])
+            self._clock_last = shown
+        if not self._clock_visible:
+            self._clock_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self._clock_frame.lift()
+            self._clock_visible = True
+            print("[CLOCK] Night clock on")
+
+    def _hide_night_clock(self):
+        if self._clock_frame is not None:
+            self._clock_frame.place_forget()
+        if self._clock_visible:
+            print("[CLOCK] Night clock off")
+        self._clock_visible = False
+
+    # ── Face buttons ──────────────────────────────────────────────────────────
+    def on_key_talk(self, event=None):
+        """Big circle: start listening without the wake word."""
+        self.last_user_interaction = time.time()
+        if self._clock_visible:
+            self._hide_night_clock()
+        if self.current_state in [BotStates.IDLE, BotStates.SCREENSAVER]:
+            print("[KEY] Talk button")
+            self.manual_wake_event.set()
+
+    def on_key_cancel(self, event=None):
+        """Triangle: stop music, and stop BMO talking for the rest of this turn."""
+        self.last_user_interaction = time.time()
+        print("[KEY] Cancel button")
+        for proc in list(self.active_sounds):
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        if self.current_state in [BotStates.SPEAKING, BotStates.THINKING]:
+            self.cancel_event.set()
+            try:
+                self._kill_tts_pipeline()
+            except Exception as e:
+                print(f"[KEY] Could not stop speech: {e}")
+
+    def on_key_menu(self, event=None):
+        """Small circle: open the games menu."""
+        self.last_user_interaction = time.time()
+        if self.current_state in [BotStates.IDLE, BotStates.SCREENSAVER]:
+            print("[KEY] Menu button")
+            self.launch_game("menu")
+
+    def on_key_volume(self, delta):
+        if self.current_state == BotStates.GAME:
+            return
+        self.last_user_interaction = time.time()
+        self.volume = max(0.0, min(1.0, round(self.volume + delta, 2)))
+        try:
+            self._show_volume_overlay()
+            self._volume_var.set(int(self.volume * 100))
+            self._persist_volume()
+        except Exception as e:
+            print(f"[KEY] Volume: {e}")
+
+    # ── Games ─────────────────────────────────────────────────────────────────
+    def launch_game(self, name="menu"):
+        """Run a game (or the games menu) full screen, then say the score.
+
+        BMO is marked busy for the whole game so it neither listens for the wake
+        word nor starts the screensaver, and the idle watchdog is kept fed."""
+        if self._game_proc is not None:
+            return
+
+        def worker():
+            deadline = time.time() + 60
+            while not self._try_claim_busy():          # wait for the current turn to end
+                if self.stop_event.wait(0.2) or time.time() > deadline:
+                    return
+            result = None
+            try:
+                self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}, timeout_s=30)
+                self.master.after(0, self._hide_night_clock)
+                self.set_state(BotStates.GAME, "Playing...")
+                here = os.path.dirname(os.path.abspath(__file__))
+                print(f"[GAME] Starting {name}")
+                self._game_proc = subprocess.Popen(
+                    [sys.executable, "-m", "core.games", name], cwd=here,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                lines = []
+                while self._game_proc.poll() is None:
+                    self.last_user_interaction = time.time()
+                    if self.stop_event.wait(1.0):
+                        self._game_proc.terminate()
+                        return
+                out = self._game_proc.stdout.read() or ""
+                for line in out.splitlines():
+                    if line.startswith("RESULT "):
+                        try:
+                            result = json.loads(line[7:])
+                        except ValueError:
+                            pass
+                    else:
+                        lines.append(line)
+                if self._game_proc.returncode not in (0, None):
+                    print(f"[GAME] Exited with code {self._game_proc.returncode}: {' | '.join(lines[-5:])}")
+                print(f"[GAME] Result: {result}")
+            except Exception as e:
+                print(f"[GAME] Could not run {name}: {e}")
+            finally:
+                self._game_proc = None
+                self.master.after(0, self.master.focus_force)
+                self.set_state(BotStates.IDLE, "Tap to speak")
+                try:
+                    if result is None:
+                        self.speak("BMO could not start the game. Sorry!")
+                    else:
+                        self.speak(extras.spoken_result(result))
+                finally:
+                    self._release_busy()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ── Spoken shutdown ───────────────────────────────────────────────────────
+    def shutdown_device(self):
+        """Power the Pi off after BMO has finished saying goodbye."""
+        def worker():
+            time.sleep(0.5)
+            self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}, timeout_s=20)
+            time.sleep(1.0)
+            try:
+                self.brain.save_history(force=True)
+            except Exception:
+                pass
+            print("[POWER] Shutting down at the user's request")
+            try:
+                r = subprocess.run(POWEROFF_COMMAND, capture_output=True, text=True, timeout=20)
+                if r.returncode != 0:
+                    print(f"[POWER] Shutdown refused: {r.stderr.strip()}")
+                    self.speak("BMO is not allowed to shut down yet. The permission needs to be set up.")
+            except Exception as e:
+                print(f"[POWER] Shutdown failed: {e}")
+        threading.Thread(target=worker, daemon=True).start()
+
     def update_animation(self):
+        self._update_night_clock()
         if self.current_state == BotStates.DISPLAY_IMAGE:
             self.master.after(500, self.update_animation)
             return
@@ -1337,6 +1520,12 @@ class BotGUI:
                             self.set_state(BotStates.IDLE, "Tap to speak")
                 threading.Thread(target=music_worker, daemon=True).start()
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "play_game":
+                self.launch_game(str(action_data.get("game") or "menu"))
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "shutdown":
+                self.shutdown_device()
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "set_timer":
                 # Real handler — was advertised in the system prompt but
                 # silently ignored.  Coerce minutes safely; clamp to [0.05, 720].
@@ -1351,7 +1540,9 @@ class BotGUI:
                     print(f"[TIMER] Bad set_timer payload {action_data!r}: {e}")
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
 
-        # 2. Speak the remaining text
+        # 2. Speak the remaining text (unless the triangle button cancelled this turn)
+        if self.cancel_event.is_set():
+            return
         if chunk.strip():
             self.speak(chunk, msg=None, end_of_turn=is_last)
 
@@ -1391,6 +1582,7 @@ class BotGUI:
                 self.last_user_interaction = time.time()
                 # 2. Record
                 self.set_state(BotStates.LISTENING, "Listening...")
+                self.cancel_event.clear()
                 # Pre-warm Piper in parallel with STT so the first TTS chunk has zero start-up gap
                 threading.Thread(target=self._warmup_piper, daemon=True).start()
                 wav_file = self.record_audio()

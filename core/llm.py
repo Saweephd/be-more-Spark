@@ -4,6 +4,7 @@ import requests
 import logging
 import re
 import json
+import time
 import urllib.parse
 import numpy as np
 from .config import (LLM_URL, LLM_MODEL, FAST_LLM_MODEL, VISION_MODEL, VLM_HEF_PATH, LLM_KEEP_ALIVE,
@@ -570,6 +571,42 @@ class Brain:
         # System prompt is static; current time/date is injected per-turn into
         # the user message via _with_current_context() before the request.
         self.history.append({"role": "user", "content": user_text})
+
+        # Pre-LLM game and shutdown checks (core/extras.py). A shutdown is only
+        # carried out after a spoken "yes" on the next turn.
+        try:
+            from core import extras
+            pending_since = getattr(self, "_shutdown_pending", 0) or 0
+            self._shutdown_pending = 0
+            if pending_since and time.time() - pending_since < 90:
+                if extras.match_yes(user_text) and not extras.match_no(user_text):
+                    line = "Okay. Good night! BMO is shutting down."
+                    action = '{"action": "shutdown"}'
+                    self.history.append({"role": "assistant", "content": line})
+                    yield line
+                    yield action
+                    return
+                line = "Okay, BMO will stay awake."
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                return
+            if extras.match_shutdown(user_text):
+                self._shutdown_pending = time.time()
+                line = "Do you want BMO to shut down? Say yes or no."
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                return
+            game = extras.match_game(user_text)
+            if game:
+                line = "Let's look at the games!" if game == "menu" else "Yay! Let's play %s!" % extras.GAME_TITLES[game]
+                action = json.dumps({"action": "play_game", "game": game})
+                print(f"[LLM-STREAM] Game request MATCHED: {game}")
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield action
+                return
+        except Exception as e:
+            print(f"[LLM-STREAM] extras check error (non-fatal): {e}")
 
         # ---- Edge skill router (local fast path) ------------------------
         # Try local skills first (time, weather, ping, math, memory).

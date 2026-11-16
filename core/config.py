@@ -183,3 +183,13 @@ def __getattr__(name):
 VOLUME = 0.75
 
 
+
+
+# ---------- Night clock and shutdown (BMO finalization, Nov 2026) ----------
+# Between these hours an idle BMO shows a dim red clock, not its face.
+NIGHT_CLOCK_START_HOUR = int(os.environ.get("BMO_NIGHT_START", "22"))
+NIGHT_CLOCK_END_HOUR = int(os.environ.get("BMO_NIGHT_END", "7"))
+NIGHT_CLOCK_IDLE_S = 60          # quiet seconds before the clock comes back
+NIGHT_CLOCK_12_HOUR = True
+# Command used by the spoken shutdown. Needs the one-line sudo rule from the runbook.
+POWEROFF_COMMAND = ["sudo", "-n", "/usr/sbin/poweroff"]

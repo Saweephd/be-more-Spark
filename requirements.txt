@@ -17,4 +17,4 @@ soundfile
 google-generativeai
 python-dotenv
 psutil
-opencv-python
+opencv-pythonpygame>=2.5

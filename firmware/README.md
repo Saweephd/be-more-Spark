@@ -24,4 +24,4 @@ Board: "Adafruit Feather 32u4" from the Adafruit AVR Boards package. Needs the
 Arduino `Keyboard` library. If the port does not appear, press the Feather's reset
 button twice quickly to enter the bootloader, then upload within eight seconds.
 
-`ops/bmo-ctl.sh flash-buttons` does this from BMO itself.
+A `flash-buttons` command for `ops/bmo-ctl.sh`, which does this from BMO itself, is added once the board is connected and checked.
