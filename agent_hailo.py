@@ -42,7 +42,7 @@ from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE
 from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
 from core import extras
 from core import music_library
-from core.config import (SLIDE_SECONDS, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
+from core.config import (SLIDE_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
                          POWEROFF_COMMAND)
 
 # =========================================================================
@@ -236,6 +236,11 @@ class BotGUI:
         self.mouth_ema = 0.0 # Exponential moving average for smooth transitions
         self.mouth_viseme_jitter = 0 # Offset for different "phoneme" looks
         self.load_animations()
+        try:  # the speaker's own level; BMO's volume buttons work within it
+            subprocess.run(['amixer', '-c', SPEAKER_CARD, 'sset', 'PCM', '%d%%' % SPEAKER_LEVEL_PERCENT, 'unmute'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        except Exception as e:
+            print(f'[SOUND] Could not set the speaker level: {e}')
         self.load_sounds()
         self.update_animation()
 
