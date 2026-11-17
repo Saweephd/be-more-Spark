@@ -595,6 +595,7 @@ class Brain:
                 line = "Do you want BMO to shut down? Say yes or no."
                 self.history.append({"role": "assistant", "content": line})
                 yield line
+                yield '{"action": "listen"}'
                 return
             game = extras.match_game(user_text)
             if game:

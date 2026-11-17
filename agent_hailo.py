@@ -43,7 +43,7 @@ from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloo
 from core import extras
 from core import music_library
 from core.config import (SLIDE_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
-                         POWEROFF_COMMAND)
+                         POWEROFF_COMMANDS)
 
 # =========================================================================
 # 1. HARDWARE CONFIGURATION
@@ -815,13 +815,15 @@ class BotGUI:
             except Exception:
                 pass
             print("[POWER] Shutting down at the user's request")
-            try:
-                r = subprocess.run(POWEROFF_COMMAND, capture_output=True, text=True, timeout=20)
-                if r.returncode != 0:
-                    print(f"[POWER] Shutdown refused: {r.stderr.strip()}")
-                    self.speak("BMO is not allowed to shut down yet. The permission needs to be set up.")
-            except Exception as e:
-                print(f"[POWER] Shutdown failed: {e}")
+            for command in POWEROFF_COMMANDS:
+                try:
+                    r = subprocess.run(command, capture_output=True, text=True, timeout=20)
+                    if r.returncode == 0:
+                        return
+                    print(f"[POWER] {command[0]} refused: {r.stderr.strip()}")
+                except Exception as e:
+                    print(f"[POWER] {command[0]} failed: {e}")
+            self.speak("BMO is not allowed to shut down yet. The permission needs to be set up.")
         threading.Thread(target=worker, daemon=True).start()
 
     def update_animation(self):
@@ -1583,6 +1585,19 @@ class BotGUI:
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "play_game":
                 self.launch_game(str(action_data.get("game") or "menu"))
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "listen":
+                # BMO asked a question: open the microphone for the answer, no wake word needed.
+                def listen_worker():
+                    end = time.time() + 30
+                    time.sleep(0.5)
+                    while self.is_busy and time.time() < end:   # until the question has been spoken
+                        time.sleep(0.2)
+                    if self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}, timeout_s=30):
+                        time.sleep(0.4)
+                        if self.current_state in [BotStates.IDLE, BotStates.SCREENSAVER]:
+                            self.manual_wake_event.set()
+                threading.Thread(target=listen_worker, daemon=True).start()
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "shutdown":
                 self.shutdown_device()

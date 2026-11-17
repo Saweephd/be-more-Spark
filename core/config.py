@@ -191,8 +191,9 @@ NIGHT_CLOCK_START_HOUR = int(os.environ.get("BMO_NIGHT_START", "22"))
 NIGHT_CLOCK_END_HOUR = int(os.environ.get("BMO_NIGHT_END", "7"))
 NIGHT_CLOCK_IDLE_S = 60          # quiet seconds before the clock comes back
 NIGHT_CLOCK_12_HOUR = True
-# Command used by the spoken shutdown. Needs the one-line sudo rule from the runbook.
-POWEROFF_COMMAND = ["sudo", "-n", "/usr/sbin/poweroff"]
+# Commands tried in order by the spoken shutdown. The first needs no special rights:
+# the desktop login lets BMO's own service ask the system to power off.
+POWEROFF_COMMANDS = [["systemctl", "poweroff"], ["sudo", "-n", "/usr/sbin/poweroff"]]
 
 # Seconds each picture stays up while a song plays (pictures live in slides/).
 SLIDE_SECONDS = float(os.environ.get("BMO_SLIDE_SECONDS", "6"))

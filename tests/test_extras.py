@@ -110,8 +110,9 @@ class VoicePath(unittest.TestCase):
     def test_shutdown_needs_a_yes(self):
         brain = self.Brain()
         out = self.say(brain, "shut down")
-        self.assertEqual(len(out), 1)
+        self.assertEqual(len(out), 2)
         self.assertNotIn("action", out[0])
+        self.assertIn('"listen"', out[1])
         out = self.say(brain, "yes")
         self.assertIn('"shutdown"', out[-1])
 
