@@ -41,7 +41,8 @@ from core.stt import transcribe_audio
 from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE_WORD_THRESHOLD, ALSA_DEVICE, VOLUME
 from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
 from core import extras
-from core.config import (NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
+from core import music_library
+from core.config import (SLIDE_SECONDS, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
                          POWEROFF_COMMAND)
 
 # =========================================================================
@@ -224,6 +225,10 @@ class BotGUI:
         self._game_proc = None
         self._clock_frame = None                          # night clock overlay, built on first use
         self._clock_visible = False
+        self._slides = []                                  # pictures for the song that is playing
+        self._slide_index = -1
+        self._slide_next = 0.0
+        self._slide_image = None
         self._clock_last = None
 
         self.animations = {}
@@ -531,13 +536,14 @@ class BotGUI:
             if os.path.exists(path):
                 self.sounds[category] = [os.path.join(path, f) for f in os.listdir(path) if f.lower().endswith('.wav')]
 
-    def play_sound(self, category):
+    def play_sound(self, category, sound_file=None):
         if self.is_muted:
             return None
-        sounds = self.sounds.get(category, [])
-        if not sounds:
-            return None
-        sound_file = random.choice(sounds)
+        if sound_file is None:
+            sounds = self.sounds.get(category, [])
+            if not sounds:
+                return None
+            sound_file = random.choice(sounds)
         try:
             # For pre-recorded sounds, we'll manually set mouth_open to animate
             # while the sound plays, since aplay doesn't give us volume data.
@@ -648,11 +654,7 @@ class BotGUI:
         """Triangle: stop music, and stop BMO talking for the rest of this turn."""
         self.last_user_interaction = time.time()
         print("[KEY] Cancel button")
-        for proc in list(self.active_sounds):
-            try:
-                proc.terminate()
-            except Exception:
-                pass
+        self.stop_music()
         if self.current_state in [BotStates.SPEAKING, BotStates.THINKING]:
             self.cancel_event.set()
             try:
@@ -678,6 +680,65 @@ class BotGUI:
             self._persist_volume()
         except Exception as e:
             print(f"[KEY] Volume: {e}")
+
+    # ── Songs and slideshow ───────────────────────────────────────────────────
+    def stop_music(self):
+        """Stop any sound that is playing and put the face back."""
+        self._slides = []
+        for proc in list(self.active_sounds):
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        if self.current_state == BotStates.JAMMING:
+            self.set_state(BotStates.IDLE, "Tap to speak")
+
+    def start_song(self, file_name=None):
+        """Play one song by file name, or a random one, with its pictures if there are any."""
+        def worker():
+            if not self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}):
+                return  # shutdown
+            library = music_library.tracks()
+            track = next((t for t in library if t["file"] == file_name), None) if file_name else None
+            if track is None and library:
+                track = random.choice(library)
+            if track is None:
+                print("[MUSIC] No songs in sounds/music")
+                return
+            print(f"[MUSIC] Playing {track['file']}")
+            self._slide_index = -1
+            self._slide_next = 0.0
+            self._slides = music_library.slides_for(track)
+            proc = self.play_sound("music", track["path"])
+            if not proc:
+                self._slides = []
+                return
+            self.set_state(BotStates.JAMMING, track["title"])
+            try:
+                proc.wait(timeout=600)
+            except subprocess.TimeoutExpired:
+                try: proc.terminate()
+                except Exception: pass
+            self._slides = []
+            if self.current_state == BotStates.JAMMING:
+                self.set_state(BotStates.IDLE, "Tap to speak")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _update_slideshow(self):
+        """Show the next picture when it is due. Runs on the Tk thread."""
+        now = time.time()
+        if now < self._slide_next or not self._slides:
+            return
+        self._slide_next = now + SLIDE_SECONDS
+        self._slide_index = (self._slide_index + 1) % len(self._slides)
+        path = self._slides[self._slide_index]
+        try:
+            img = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+            img = ImageOps.pad(img, (self.BG_WIDTH, self.BG_HEIGHT), Image.Resampling.LANCZOS, color="#000000")
+            self._slide_image = ImageTk.PhotoImage(img)
+            self.background_label.config(image=self._slide_image)
+        except Exception as e:
+            print(f"[SLIDES] Could not show {os.path.basename(path)}: {e}")
 
     # ── Games ─────────────────────────────────────────────────────────────────
     def launch_game(self, name="menu"):
@@ -760,6 +821,11 @@ class BotGUI:
 
     def update_animation(self):
         self._update_night_clock()
+        if self.current_state == BotStates.JAMMING and self._slides:
+            self._update_slideshow()
+            if self.status_label.winfo_ismapped(): self.status_label.place_forget()
+            self.master.after(250, self.update_animation)
+            return
         if self.current_state == BotStates.DISPLAY_IMAGE:
             self.master.after(500, self.update_animation)
             return
@@ -1505,20 +1571,10 @@ class BotGUI:
                     self.set_state(expr, f"Feeling {expr}...")
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "play_music":
-                def music_worker():
-                    if not self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}):
-                        return  # shutdown
-                    music_proc = self.play_sound("music")
-                    if music_proc:
-                        self.set_state(BotStates.JAMMING, "Jamming!")
-                        try:
-                            music_proc.wait(timeout=600)
-                        except subprocess.TimeoutExpired:
-                            try: music_proc.terminate()
-                            except Exception: pass
-                        if self.current_state == BotStates.JAMMING:
-                            self.set_state(BotStates.IDLE, "Tap to speak")
-                threading.Thread(target=music_worker, daemon=True).start()
+                self.start_song(action_data.get("file"))
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "stop_music":
+                self.stop_music()
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "play_game":
                 self.launch_game(str(action_data.get("game") or "menu"))

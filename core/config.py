@@ -193,3 +193,6 @@ NIGHT_CLOCK_IDLE_S = 60          # quiet seconds before the clock comes back
 NIGHT_CLOCK_12_HOUR = True
 # Command used by the spoken shutdown. Needs the one-line sudo rule from the runbook.
 POWEROFF_COMMAND = ["sudo", "-n", "/usr/sbin/poweroff"]
+
+# Seconds each picture stays up while a song plays (pictures live in slides/).
+SLIDE_SECONDS = float(os.environ.get("BMO_SLIDE_SECONDS", "6"))

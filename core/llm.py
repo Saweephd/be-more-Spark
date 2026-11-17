@@ -605,6 +605,26 @@ class Brain:
                 yield line
                 yield action
                 return
+            from core import music_library
+            if music_library.match_stop(user_text):
+                line = "Okay, music off."
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield '{"action": "stop_music"}'
+                return
+            if music_library.match_list(user_text):
+                line = music_library.spoken_list()
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                return
+            song = music_library.match_track(user_text)
+            if song:
+                line = "Ooh, BMO loves %s!" % song["title"]
+                print(f"[LLM-STREAM] Song request MATCHED: {song['file']}")
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield json.dumps({"action": "play_music", "file": song["file"]})
+                return
         except Exception as e:
             print(f"[LLM-STREAM] extras check error (non-fatal): {e}")
 

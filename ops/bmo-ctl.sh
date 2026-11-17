@@ -43,6 +43,12 @@ Usage: bmo-ctl.sh <command> [arguments]
   stt [file.wav]         Time speech to text on the network service and on the Pi
                          (default file: the last recorded request)
   selftest [--audio]     Run the checks; --audio also plays a short phrase
+  games                  List the games and best scores
+  music                  List the songs BMO can be asked for, and the pictures
+  music-import <folder>  Bring songs and pictures from a folder into BMO
+  buttons [seconds]      Button board test: press each button, see what BMO receives
+  flash-buttons          Build the button board program and load it onto the Feather
+  battery                Battery voltage and charge from the power board
   help                   This text
 USAGE
 }
@@ -197,6 +203,17 @@ cmd_selftest() {
     [ $fails -eq 0 ]
 }
 
+ARDUINO="$HOME/.local/bin/arduino-cli"
+FQBN="adafruit:avr:feather32u4"
+cmd_flash_buttons() {
+    [ -x "$ARDUINO" ] || { echo "flash-buttons: arduino-cli is not installed in ~/.local/bin"; exit 1; }
+    local sketch="$REPO/firmware/bmo_controller" out="$HOME/.cache/bmo-firmware"
+    "$ARDUINO" compile --fqbn "$FQBN" --output-dir "$out" "$sketch" || { echo "flash-buttons: build failed"; exit 1; }
+    local port; port="$(ls /dev/ttyACM* 2>/dev/null | head -1)"
+    [ -n "$port" ] || { echo "flash-buttons: built, but the Feather is not connected (no /dev/ttyACM port). Plug its USB cable into the Pi."; exit 1; }
+    "$ARDUINO" upload --fqbn "$FQBN" -p "$port" --input-dir "$out" "$sketch" && echo "flash-buttons: loaded onto the Feather at $port"
+}
+
 main() {
     local cmd="${1:-help}"; [ $# -gt 0 ] && shift
     case "$cmd" in
@@ -213,6 +230,12 @@ main() {
         listen)          cmd_listen "$@";;
         stt)             runpy ops/bmo_stt.py "$@" 2>&1 | grep -v '^\[CONFIG\]';;
         selftest)        cmd_selftest "$@";;
+        games)           runpy -c 'from core.games import GAMES; from core.games.common import load_scores; s=load_scores(); [print("%-12s %-12s best %s" % (k, v, s.get(k, 0))) for k, v in GAMES.items()]';;
+        music)           runpy ops/bmo_music.py list;;
+        music-import)    [ -n "${1:-}" ] || { echo 'music-import: give a folder'; exit 2; }; runpy ops/bmo_music.py import "$1";;
+        buttons)         runpy ops/bmo_buttons.py "$@";;
+        flash-buttons)   cmd_flash_buttons;;
+        battery)         runpy ops/bmo_battery.py;;
         help|-h|--help)  usage;;
         *)               echo "unknown command: $cmd"; usage; exit 2;;
     esac
