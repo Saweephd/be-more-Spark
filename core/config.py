@@ -199,4 +199,4 @@ SLIDE_SECONDS = float(os.environ.get("BMO_SLIDE_SECONDS", "6"))
 
 # The USB speaker forgets its own level when it is replugged, so BMO sets it at every start.
 SPEAKER_CARD = os.environ.get("BMO_SPEAKER_CARD", "UACDemoV10")
-SPEAKER_LEVEL_PERCENT = int(os.environ.get("BMO_SPEAKER_LEVEL", "65"))
+SPEAKER_LEVEL_PERCENT = int(os.environ.get("BMO_SPEAKER_LEVEL", "75"))
