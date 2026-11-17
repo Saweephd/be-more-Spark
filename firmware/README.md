@@ -11,8 +11,8 @@ Raspberry Pi as a USB keyboard.
 | D-pad down | 9 | Down arrow |
 | D-pad left | 10 | Left arrow |
 | Triangle | 11 | Left Shift |
-| Small circle | 12 | Enter |
-| Big circle | 13 | Space |
+| Big circle | 12 | Space |
+| Small circle | 13 | Enter |
 
 The pin assignments come from the controller board designed by brenpoly
 (https://www.printables.com/model/1582055). The board files are his and are not

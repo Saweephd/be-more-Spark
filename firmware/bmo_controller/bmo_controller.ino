@@ -15,8 +15,8 @@
 //        9        D-pad down           Down arrow
 //       10        D-pad left           Left arrow
 //       11        Triangle             Left Shift  (button B / cancel)
-//       12        Small circle         Enter       (start / menu)
-//       13        Big circle           Space       (button A / talk)
+//       12        Big circle           Space       (button A / talk)
+//       13        Small circle         Enter       (start / menu)
 //
 // Keys are held for as long as the button is held, so games get real
 // press-and-hold behaviour. Each button is debounced separately.
@@ -27,7 +27,7 @@ const uint8_t BUTTON_COUNT = 7;
 const uint8_t PINS[BUTTON_COUNT] = {5, 6, 9, 10, 11, 12, 13};
 const uint8_t KEYS[BUTTON_COUNT] = {
   KEY_UP_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_LEFT_ARROW,
-  KEY_LEFT_SHIFT, KEY_RETURN, ' '
+  KEY_LEFT_SHIFT, ' ', KEY_RETURN
 };
 
 const unsigned long DEBOUNCE_MS = 12;      // ignore contact bounce shorter than this
