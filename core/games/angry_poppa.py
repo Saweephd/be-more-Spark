@@ -365,7 +365,9 @@ def draw_stairs(surf, x, direction, open_):
 class AngryPoppa(Game):
     name = "angry_poppa"
     title = "Angry Poppa"
-    help_lines = ("Up: jump   Big button: swatter", "Triangle: spray   Down: pump", "Clear the pots, then take the stairs")
+    music = "angry_poppa"
+    help_lines = ("Up: jump   Big button: swatter", "Triangle: spray   Down: pump",
+                  "Clear every pot, then take the stairs", "Five stages: up three floors and back down")
     title_color = (250, 210, 70)
 
     def __init__(self, **kw):
@@ -470,6 +472,7 @@ class AngryPoppa(Game):
         if "up" in inp.pressed and self.on_ground:
             self.vy = -365.0
             self.on_ground = False
+            self.sfx("jump")
         old_y = self.y
         self.vy += GRAVITY * dt
         self.x = max(10.0, min(lv["width"] - 10.0, self.x + self.vx * dt))
@@ -485,13 +488,19 @@ class AngryPoppa(Game):
 
         if "a" in inp.pressed and self.swing_cool <= 0:
             self.swing, self.swing_cool = 0.2, 0.32
+            self.sfx("swat")
             self.swat()
-        if "b" in inp.pressed and self.pressure > 0:
-            self.pressure -= 1
-            self.spray()
+        if "b" in inp.pressed:
+            if self.pressure > 0:
+                self.pressure -= 1
+                self.sfx("spray")
+                self.spray()
+            else:
+                self.sfx("empty")
         if "down" in inp.pressed and self.on_ground and self.pressure < self.max_pressure:
             self.pressure += 1
             self.pump_anim = 0.18
+            self.sfx("pump")
 
         self.update_gnats(dt)
         if self.state != "play":
@@ -508,6 +517,7 @@ class AngryPoppa(Game):
         if not self.cleared and all(p["hp"] <= 0 for p in self.pots) and self.queen is None:
             self.cleared = True
             self.banner = ("All clear! Take the stairs", 2.5)
+            self.sfx("clear")
         if self.cleared and abs(self.x - lv["door"]) < 12:
             self.finish_level()
 
@@ -516,6 +526,7 @@ class AngryPoppa(Game):
         if g["hp"] <= 0 and g in self.gnats:
             self.gnats.remove(g)
             self.score += {"gnat": 10, "dart": 20, "fat": 30}[g["kind"]]
+            self.sfx("zap")
             self.sparks.append([g["x"], g["y"], 0.25])
             if self.rng.random() < 0.06:
                 self.pickups.append({"kind": self.rng.choice(("donut", "soda")), "x": g["x"], "y": g["y"], "vy": 0.0})
@@ -546,14 +557,20 @@ class AngryPoppa(Game):
         p["hit"] = 0.15
         if p["hp"] <= 0:
             self.score += 100
+            self.sfx("pot")
+        else:
+            self.sfx("splat")
             self.sparks.append([p["x"], p["y"] - 12, 0.4])
 
     def hurt_queen(self, damage):
         q = self.queen
         q["hp"] -= damage
         q["hit"] = 0.12
+        self.sfx("queen_hit")
         if q["hp"] <= 0:
             self.score += 2000
+            self.sfx("powerup")
+            self.sound.music(self.music)
             for k in range(8):
                 self.sparks.append([q["x"] + math.cos(k) * 16, q["y"] + math.sin(k) * 12, 0.6])
             self.queen = None
@@ -562,6 +579,8 @@ class AngryPoppa(Game):
     def lose_heart(self):
         self.hearts -= 1
         self.invuln = 1.3
+        if self.hearts > 0:
+            self.sfx("hurt")
         self.score = max(0, self.score - 10)
         if self.hearts <= 0:
             self.game_over()
@@ -605,6 +624,10 @@ class AngryPoppa(Game):
         q["x"] = q["hx"] + math.sin(q["ph"] * 0.9) * 70
         q["y"] = 104 + math.sin(q["ph"] * 1.7) * 44
         if abs(q["x"] - self.x) < 300:
+            if not q.get("seen"):
+                q["seen"] = True
+                self.sfx("queen")
+                self.sound.music("queen")
             q["spawn"] -= dt
             if q["spawn"] <= 0 and len(self.gnats) < MAX_GNATS:
                 for _ in range(2):
@@ -659,6 +682,7 @@ class AngryPoppa(Game):
             if hero.collidepoint(pk["x"], pk["y"] - 8):
                 self.pickups.remove(pk)
                 self.score += 25
+                self.sfx({"donut": "donut", "soda": "soda"}.get(pk["kind"], "powerup"))
                 if pk["kind"] == "donut":
                     self.hearts = min(6, self.hearts + 1)
                     self.banner = ("Donut! One heart back", 1.2)
@@ -677,6 +701,7 @@ class AngryPoppa(Game):
     def finish_level(self):
         self.score += 500 + max(0, 400 - int(self.level_time) * 2) + self.hearts * 50
         if self.level_index + 1 < len(STAGES):
+            self.sfx("stairs")
             self.level_index += 1
             self.hearts = min(6, self.hearts + 1)
             self.load_level()
@@ -774,6 +799,8 @@ class AngryPoppa(Game):
         left = sum(1 for p in self.pots if p["hp"] > 0)
         text(surf, "Pots %d" % left, (W - 96, 22), 16, c.YELLOW if left else (120, 230, 140))
         text(surf, self.room_name(), (W // 2, 22), 16, c.WHITE, center=True)
+        text(surf, "Stage %d of %d" % (self.level_index + 1, len(STAGES)), (6, 34), 14, (200, 200, 210))
+        self.draw_pointer(surf)
         if self.boost > 0:
             text(surf, "BOOST", (W // 2, 5), 18, (120, 240, 140), center=True)
         if self.queen:
@@ -783,6 +810,27 @@ class AngryPoppa(Game):
             text(surf, "QUEEN", (W // 2, H - 28), 16, (250, 210, 70), center=True)
         if self.banner:
             text(surf, self.banner[0], (W // 2, 44), 22, c.YELLOW, center=True)
+
+    def draw_pointer(self, surf):
+        """An arrow at the screen edge toward the stairs once clear, else toward the nearest pot off screen."""
+        cam = self.cam
+        if self.cleared:
+            target, label, col = self.level["door"], "STAIRS", (120, 240, 140)
+        else:
+            left = [p for p in self.pots if p["hp"] > 0]
+            if not left:
+                return
+            target = min(left, key=lambda p: abs(p["x"] - self.x))["x"]
+            label, col = "POT", c.YELLOW
+        if cam - 10 < target < cam + W + 10:
+            return
+        right = target > cam + W / 2
+        x = W - 14 if right else 14
+        y = 120
+        if int(self.time * 3) % 2 == 0:
+            pts = [(x + (8 if right else -8), y), (x - (6 if right else -6), y - 9), (x - (6 if right else -6), y + 9)]
+            pygame.draw.polygon(surf, col, pts)
+        text(surf, label, (x - (36 if right else -6), y + 12), 14, col)
 
     def render(self, surf):
         super().render(surf)

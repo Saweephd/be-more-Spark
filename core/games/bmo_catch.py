@@ -45,6 +45,7 @@ KINDS = {  # name: (art, points, weight)
 class BmoCatch(Game):
     name = "bmo_catch"
     title = "BMO Catch"
+    music = "bmo_catch"
     help_lines = ("D-pad: move the catcher", "Big button: dash", "Dodge the spiky ones!")
     title_color = (190, 160, 250)
 
@@ -90,6 +91,7 @@ class BmoCatch(Game):
             self.dash_dir = direction
         if "a" in inp.pressed and self.dash_cool <= 0 and inp.touch is None:
             self.dash_t, self.dash_cool = 0.16, 0.55
+            self.sfx("dash")
         if self.dash_t > 0:
             self.dash_t -= dt
             self.x += self.dash_dir * 620.0 * dt
@@ -114,6 +116,7 @@ class BmoCatch(Game):
                     self.lives -= 1
                     self.combo = 0
                     self.flash = 0.35
+                    self.sfx("hurt")
                     if self.lives <= 0:
                         self.game_over()
                         return
@@ -121,6 +124,10 @@ class BmoCatch(Game):
                     self.combo += 1
                     gain = KINDS[it["kind"]][1] * (1 + min(4, self.combo // 5))
                     self.score += gain
+                    if self.combo % 5 == 0:
+                        self.sfx("combo")
+                    else:
+                        self.sfx({"gem": "gem", "heart": "heart"}.get(it["kind"], "catch"))
                     self.pops.append([it["x"], FLOOR - 44.0, "+%d" % gain, 0.7])
             elif it["y"] > FLOOR + 4:
                 self.items.remove(it)

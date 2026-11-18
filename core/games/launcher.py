@@ -28,6 +28,7 @@ class Menu:
         self.time = 0.0
         self.scores_path = scores_path
         self.message = ""
+        self.sound = c._sound.Silent()
 
     def step(self, dt, inp):
         self.time += dt
@@ -35,16 +36,20 @@ class Menu:
             return
         if "down" in inp.pressed:
             self.index = (self.index + 1) % len(self.games)
+            self.sound.play("move")
         if "up" in inp.pressed:
             self.index = (self.index - 1) % len(self.games)
+            self.sound.play("move")
         if inp.touch is not None and "a" in inp.pressed:
             row = (inp.touch[1] - 78) // 34
             if 0 <= row < len(self.games):
                 self.index = row
         if "a" in inp.pressed or "start" in inp.pressed:
             self.choice = self.games[self.index][0]
+            self.sound.play("select")
         if "b" in inp.pressed:
             self.done = True
+            self.sound.play("back")
 
     def render(self, surf):
         surf.fill((18, 60, 66))
@@ -73,6 +78,8 @@ def run_menu(screen=None, max_frames=None):
     clock = pygame.time.Clock()
     inp = c.Input()
     menu = Menu()
+    menu.sound = c._sound.get()
+    menu.sound.music("menu")
     last = {"game": None, "played": False, "score": 0, "best": 0, "new_best": False, "title": ""}
     start_held = 0.0
     frames = 0
@@ -98,7 +105,9 @@ def run_menu(screen=None, max_frames=None):
         if menu.choice:
             name, menu.choice = menu.choice, None
             game = importlib.import_module("core.games." + name).make()
+            menu.sound.stop_music()
             res = c.run(game, screen=screen)
+            menu.sound.music("menu")
             if res.get("played"):
                 last = res
                 menu.message = "%s: %d" % (res["title"], res["score"])
@@ -112,6 +121,7 @@ def run_menu(screen=None, max_frames=None):
         frames += 1
         if max_frames is not None and frames >= max_frames:
             break
+    menu.sound.stop_music()
     if own:
         pygame.display.quit()
     return last

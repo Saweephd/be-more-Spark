@@ -766,8 +766,10 @@ class BotGUI:
                 self.set_state(BotStates.GAME, "Playing...")
                 here = os.path.dirname(os.path.abspath(__file__))
                 print(f"[GAME] Starting {name}")
+                env = dict(os.environ, SDL_AUDIODRIVER="alsa", AUDIODEV=str(ALSA_DEVICE),
+                           BMO_VOLUME=str(0.0 if self.is_muted else self.volume))
                 self._game_proc = subprocess.Popen(
-                    [sys.executable, "-m", "core.games", name], cwd=here,
+                    [sys.executable, "-m", "core.games", name], cwd=here, env=env,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 lines = []
                 while self._game_proc.poll() is None:

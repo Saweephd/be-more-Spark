@@ -18,6 +18,8 @@ import sys
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame  # noqa: E402
 
+from . import sound as _sound  # noqa: E402
+
 W, H = 400, 240
 SCALE = 2
 FPS = 60
@@ -131,6 +133,8 @@ class Game:
     title = "Game"
     help_lines = ()
     title_color = YELLOW
+    music = None            # name of this game's tune in sound.TUNES
+    sound = _sound.Silent()  # run() swaps in the real player
 
     def __init__(self, seed=None, scores_path=None):
         self.rng = random.Random(seed)
@@ -156,7 +160,12 @@ class Game:
         """Optional picture behind the title text."""
         self.draw(surf)
 
+    def sfx(self, name):
+        self.sound.play(name)
+
     def game_over(self):
+        self.sound.stop_music()
+        self.sfx("win" if getattr(self, "win", False) else "over")
         self.state = "over"
         self.last_score = int(self.score)
         self.best, self.new_best = save_score(self.name, int(self.score), self.scores_path)
@@ -169,19 +178,27 @@ class Game:
             if "a" in inp.pressed or "start" in inp.pressed:
                 self.reset()
                 self.state = "play"
+                self.sfx("start")
+                self.sound.music(self.music)
         elif self.state == "play":
             if "start" in inp.pressed:
                 self.state = "paused"
+                self.sfx("pause")
+                self.sound.pause_music()
             else:
                 self.update(dt, inp)
         elif self.state == "paused":
             if "start" in inp.pressed or "a" in inp.pressed:
                 self.state = "play"
+                self.sfx("pause")
+                self.sound.resume_music()
         elif self.state == "over":
             if self.time - self.over_time > 0.8 and ("a" in inp.pressed or "start" in inp.pressed):
                 self.reset()
                 self.new_best = False
                 self.state = "play"
+                self.sfx("start")
+                self.sound.music(self.music)
 
     def render(self, surf):
         if self.state == "title":
@@ -243,6 +260,7 @@ def run(game, screen=None, max_frames=None):
     canvas = pygame.Surface((W, H))
     clock = pygame.time.Clock()
     inp = Input()
+    game.sound = _sound.get()
     start_held = 0.0
     frames = 0
     running = True
@@ -284,6 +302,7 @@ def run(game, screen=None, max_frames=None):
         frames += 1
         if max_frames is not None and frames >= max_frames:
             running = False
+    game.sound.stop_music()
     res = game.result()
     if own:
         pygame.display.quit()

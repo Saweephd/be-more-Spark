@@ -63,6 +63,7 @@ BONE = [".tt......tt.", "tttt....tttt", "tttttttttttt", "tttttttttttt", "tTTt...
 class MazeeRun(Game):
     name = "mazee_run"
     title = "Mazee Run"
+    music = "mazee_run"
     help_lines = ("Big button: jump (hold to jump higher)", "D-pad down: duck", "Grab the treats!")
 
     def __init__(self, **kw):
@@ -119,10 +120,14 @@ class MazeeRun(Game):
         self.anim += dt * (6 + self.speed / 40)
         move = self.speed * dt
         self.dist += move
-        self.ducking = self.on_ground and "down" in inp.held
+        ducking = self.on_ground and "down" in inp.held
+        if ducking and not getattr(self, "ducking", False):
+            self.sfx("duck")
+        self.ducking = ducking
         if self.on_ground and "a" in inp.pressed and not self.ducking:
             self.vy = -470.0
             self.on_ground = False
+            self.sfx("jump")
         if not self.on_ground:
             if self.vy < 0 and "a" not in inp.held:
                 self.vy *= 0.45 ** (dt * 60 / 4)      # let go early for a short hop
@@ -130,6 +135,7 @@ class MazeeRun(Game):
             self.y += self.vy * dt
             if self.y >= GROUND:
                 self.y, self.vy, self.on_ground = float(GROUND), 0.0, True
+                self.sfx("land")
         self.next_spawn -= move
         if self.next_spawn <= 0:
             self.spawn()
@@ -148,6 +154,7 @@ class MazeeRun(Game):
             if dog.colliderect(pygame.Rect(int(b["x"]), b["y"], 24, 12)):
                 self.bones.remove(b)
                 self.treats += 1
+                self.sfx("coin")
         self.score = int(self.dist / 10) + self.treats * 50
         for o in self.obstacles:
             if dog.colliderect(pygame.Rect(int(o["x"]) + 3, o["y"] + 3, o["w"] - 6, o["h"] - 3)):
