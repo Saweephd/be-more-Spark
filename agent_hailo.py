@@ -764,6 +764,18 @@ class BotGUI:
                 self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}, timeout_s=30)
                 self.master.after(0, self._hide_night_clock)
                 self.set_state(BotStates.GAME, "Playing...")
+                # The voice pipeline keeps the speaker open between sentences; let the game have it.
+                time.sleep(0.6)
+                self.stop_music()
+                self._kill_tts_pipeline()
+                self.is_thinking_sound_playing = False
+                if self.thinking_audio_process is not None:
+                    try:
+                        self.thinking_audio_process.terminate()
+                    except Exception:
+                        pass
+                    self.thinking_audio_process = None
+                time.sleep(0.2)
                 here = os.path.dirname(os.path.abspath(__file__))
                 print(f"[GAME] Starting {name}")
                 env = dict(os.environ, SDL_AUDIODRIVER="alsa", AUDIODEV=str(ALSA_DEVICE),
