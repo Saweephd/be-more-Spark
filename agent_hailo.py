@@ -42,6 +42,7 @@ from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE
 from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
 from core import extras
 from core import music_library
+from core import battery
 from core.config import (SLIDE_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
                          POWEROFF_COMMANDS)
 
@@ -251,6 +252,7 @@ class BotGUI:
         self.last_screensaver_audio_time = time.time()
         threading.Thread(target=self.screensaver_audio_loop, daemon=True).start()
         threading.Thread(target=self._keep_model_warm_loop, daemon=True).start()
+        threading.Thread(target=self._battery_loop, daemon=True).start()
 
         # Pre-warm the VLM (Hailo NPU) so the first "what is this?" doesn't
         # eat a ~3 s init tax mid-conversation.  Best-effort only.
@@ -818,6 +820,50 @@ class BotGUI:
         threading.Thread(target=worker, daemon=True).start()
 
     # ── Spoken shutdown ───────────────────────────────────────────────────────
+    # ── Battery ───────────────────────────────────────────────────────────────
+    def _battery_loop(self):
+        """Every 30 seconds: read the battery, warn when low, shut down cleanly when nearly empty."""
+        if not os.path.exists(battery.BUS):
+            print("[BATTERY] I2C bus is off; battery monitoring disabled")
+            return
+        monitor = battery.Monitor()
+        while not self.stop_event.wait(30):
+            try:
+                status = battery.read()
+            except OSError as e:
+                print(f"[BATTERY] Gauge not answering: {e}")
+                continue
+            action = monitor.update(status)
+            battery.save_status(status, monitor.rising(), monitor.draining())
+            if action:
+                print(f"[BATTERY] {action} at {status['percent']}% {status['volts']} V")
+            if action == "warn":
+                self._battery_say("BMO's battery is low. Please plug BMO in soon.")
+            elif action == "shutdown":
+                proc = self._game_proc
+                if proc is not None:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                self._battery_say("BMO's battery is empty. BMO is shutting down now. Good night!")
+                self.shutdown_device()
+                return
+
+    def _battery_say(self, line):
+        deadline = time.time() + 30
+        while not self._try_claim_busy():
+            if self.stop_event.wait(0.5) or time.time() > deadline:
+                print(f"[BATTERY] Busy; could not say: {line}")
+                return
+        try:
+            self.set_state(BotStates.LOW_BATTERY, "Low battery")
+            self.speak(line)
+        finally:
+            self._release_busy()
+            if self.current_state == BotStates.LOW_BATTERY:
+                self.set_state(BotStates.IDLE, "Tap to speak")
+
     def shutdown_device(self):
         """Power the Pi off after BMO has finished saying goodbye."""
         def worker():

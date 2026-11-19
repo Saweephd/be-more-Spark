@@ -597,6 +597,12 @@ class Brain:
                 yield line
                 yield '{"action": "listen"}'
                 return
+            from core import battery
+            if battery.match_question(user_text):
+                line = battery.current_report()
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                return
             game = extras.match_game(user_text)
             if game:
                 line = "Let's look at the games!" if game == "menu" else "Yay! Let's play %s!" % extras.GAME_TITLES[game]
