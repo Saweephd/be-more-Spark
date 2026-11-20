@@ -9,15 +9,17 @@ an army base, an airfield, a snowy mountain outpost and the spies' island.
 Player two joins on a second gamepad (press its A button). Pick-ups: S spread
 shot, R rapid fire, 1UP an extra life. Finished missions unlock.
 
-All characters, art, sounds and music are original to this project. Hits are
-cartoon style: enemies vanish in a puff.
+Shoot the flying capsules to drop the power-ups, and watch for turrets set
+into the cliffs. All characters, art, sounds and music are original to this
+project. Hits are cartoon style: enemies vanish in a puff.
 """
 import math
 
 import pygame
 
 from . import common as c
-from .common import H, W, Game, text
+from . import soldiers_art as art
+from .common import H, W, Game
 
 GROUND = 206
 SEA_TOP = 216
@@ -52,8 +54,10 @@ THEMES = {
     "island": {"sky": (250, 160, 110), "far": (60, 120, 80), "ground": (230, 206, 150), "edge": (200, 176, 120),
                "plat": (110, 100, 90), "guard": (80, 110, 70)},
 }
-POINTS = {"runner": 100, "shooter": 200, "drone": 150, "jeep": 300, "sled": 250, "boat": 300}
-HP = {"runner": 1, "shooter": 2, "drone": 1, "jeep": 3, "sled": 2, "boat": 3}
+POINTS = {"runner": 100, "shooter": 200, "drone": 150, "jeep": 300, "sled": 250, "boat": 300, "turret": 500,
+          "capsule": 100}
+HP = {"runner": 1, "shooter": 2, "drone": 1, "jeep": 3, "sled": 2, "boat": 3, "turret": 6, "capsule": 1}
+LEDGE_1, LEDGE_2 = 160, 114
 UNLOCK_KEY = "soldiers_vs_spies_level"
 
 
@@ -100,25 +104,34 @@ class Soldiers(Game):
         hero = HEROES[who]
         return {"who": who, "slot": slot, "hero": hero, "x": 0.0, "y": -40.0, "vx": 0.0, "vy": 0.0, "on": False,
                 "plat": None, "face": 1, "crouch": False, "aim": (1, 0), "cool": 0.0, "weapon": "N", "lives": 3,
-                "inv": 0.0, "dead": 0.0, "chute": True, "anim": 0.0, "out": False}
+                "inv": 0.0, "dead": 0.0, "chute": True, "anim": 0.0, "out": False, "flip": False, "flash": 0.0}
 
     def build_level(self):
+        """Contra-style terrain: rocky ledges in two tiers above a continuous ground, turrets set into the cliffs."""
         L = self.level
         lv = LEVELS[L]
         rng = __import__("random").Random(500 + L)
         length = lv["length"]
         self.length = length
         self.platforms = []
-        x = 260
-        while x < length - 420:
-            w = rng.choice((56, 72, 90))
-            y = rng.choice((168, 168, 140))
-            self.platforms.append((x, y, w))
-            x += rng.randint(170, 260)
         spawns = []
-        for (px, py, pw) in self.platforms:
-            if rng.random() < 0.6:
-                spawns.append((px + pw / 2, "shooter", py))
+        x = 280
+        while x < length - 520:
+            w1 = rng.choice((96, 128, 160, 192))
+            self.platforms.append((x, LEDGE_1, w1))
+            if rng.random() < 0.55:
+                spawns.append((x + w1 * 0.6, "shooter", LEDGE_1))
+            if x > 600 and (L > 0 or rng.random() < 0.5):
+                spawns.append((x + 14, "turret", 184))
+            if w1 >= 128 and rng.random() < 0.65:
+                w2 = rng.choice((64, 80, 96))
+                x2 = x + rng.randint(20, max(21, w1 - w2 - 6))
+                self.platforms.append((x2, LEDGE_2, w2))
+                if rng.random() < 0.5:
+                    spawns.append((x2 + w2 / 2, "shooter", LEDGE_2))
+                elif L >= 2 and x > 600:
+                    spawns.append((x2 + 14, "turret", 138))
+            x += w1 + rng.randint(120, 230)
         x = 420
         while x < length - 400:
             spawns.append((x, "shooter", GROUND))
@@ -130,8 +143,8 @@ class Soldiers(Game):
                 spawns.append((x + 100, "boat", 228))
             x += rng.randint(300, 420) - 25 * L
         for i, kind in enumerate(("S", "R", "1UP" if L % 2 == 0 else "S")):
-            spawns.append((500 + i * 800, "pickup:" + kind, 146))
-        self.spawns = sorted(spawns)
+            spawns.append((480 + i * 800, "capsule:" + kind, 64 + 10 * i))
+        self.spawns = sorted(spawns, key=lambda sp: sp[0])
 
     def begin_level(self):
         self.clear_world()
@@ -146,14 +159,20 @@ class Soldiers(Game):
 
     def respawn(self, p, x=None):
         p.update({"x": self.cam + (x if x is not None else 60), "y": -30.0, "vx": 0.0, "vy": 0.0, "on": False,
-                  "plat": None, "chute": True, "dead": 0.0, "inv": 2.5, "weapon": "N", "crouch": False})
+                  "plat": None, "chute": True, "dead": 0.0, "inv": 2.5, "weapon": "N", "crouch": False,
+                  "flip": False})
+
+    def boom(self, x, y, big=False):
+        self.puffs.append([float(x), float(y), 0.0, big])
 
     # ---------- per-frame ----------
     def update(self, dt, inp):
         self.pt += dt
         if self.banner[1] > 0:
             self.banner = (self.banner[0], self.banner[1] - dt)
-        self.puffs = [[x, y, r + 30 * dt, t - dt, col] for x, y, r, t, col in self.puffs if t > dt]
+        for b in self.puffs:
+            b[2] += dt
+        self.puffs = [b for b in self.puffs if b[2] < 0.42]
         getattr(self, "phase_" + self.phase)(dt, inp)
 
     def p2_input(self, inp):
@@ -190,7 +209,7 @@ class Soldiers(Game):
     def phase_plane(self, dt, inp):
         if self.pt < dt * 1.5:
             self.sfx("drone")
-        if 1.8 < self.pt and self.pt - dt <= 1.8:
+        if 1.5 < self.pt and self.pt - dt <= 1.5:
             self.sfx("whoosh")
         if self.pt > 3.4 or (self.pt > 0.5 and "a" in inp.pressed):
             self.begin_level()
@@ -216,6 +235,7 @@ class Soldiers(Game):
             self.spawn_due(dt)
         self.update_enemies(dt)
         self.update_bullets(dt)
+        self.update_pickups(dt)
         if self.boss is not None and self.boss["hp"] > 0:
             self.update_boss(dt)
         if all(p["out"] for p in self.players):
@@ -232,6 +252,10 @@ class Soldiers(Game):
 
     def phase_clear(self, dt, inp):
         self.update_bullets(dt)
+        b = self.boss
+        if b is not None and self.pt < 1.6 and self.rng.random() < 0.35:
+            self.boom(b["x"] + self.rng.uniform(-b["w"] / 2, b["w"] / 2), b["y"] + self.rng.uniform(-b["h"] / 2, b["h"] / 2),
+                      self.rng.random() < 0.5)
         if self.pt > 3.5:
             if self.level >= len(LEVELS) - 1:
                 self.phase, self.pt = "victory", 0.0
@@ -252,6 +276,7 @@ class Soldiers(Game):
         hero = p["hero"]
         p["inv"] = max(0.0, p["inv"] - dt)
         p["cool"] = max(0.0, p["cool"] - dt)
+        p["flash"] = max(0.0, p["flash"] - dt)
         if p["dead"]:
             p["dead"] -= dt
             if p["dead"] <= 0:
@@ -263,6 +288,7 @@ class Soldiers(Game):
         left, right = "left" in held, "right" in held
         up, down = "up" in held, "down" in held
         move = (1 if right else 0) - (1 if left else 0)
+        p["_moving"] = bool(move)
         if move:
             p["face"] = move
         if p["chute"]:
@@ -283,6 +309,7 @@ class Soldiers(Game):
                     p["on"], p["plat"] = False, None
                 else:
                     p["vy"], p["on"], p["plat"] = hero["jump"], False, None
+                    p["flip"] = True
                     self.sfx("jump")
             if not p["on"]:
                 p["vy"] += GRAV * dt
@@ -292,6 +319,7 @@ class Soldiers(Game):
                     floor = self.floor_at(p["x"], old, p)
                     if p["y"] >= floor:
                         p["y"], p["vy"], p["on"] = floor, 0.0, True
+                        p["flip"] = False
             elif p["plat"] is not None:
                 px, py, pw = p["plat"]
                 if not (px - 4 <= p["x"] <= px + pw + 4):
@@ -316,7 +344,6 @@ class Soldiers(Game):
                 else:
                     p["weapon"] = pk["kind"]
                 self.sfx("powerup")
-                self.puffs.append([pk["x"], pk["y"], 3.0, 0.6, (250, 230, 120)])
         self.pickups = [pk for pk in self.pickups if not pk.get("taken")]
 
     def floor_at(self, x, prev_y, p=None):
@@ -332,9 +359,33 @@ class Soldiers(Game):
             p["plat"] = None
         return best
 
+    def pose_of(self, p):
+        """The picture for a player right now: (pose, aim name), or ('tuck', None) mid-somersault."""
+        if p["chute"]:
+            return "fall", "fwd"
+        if not p["on"] and p["flip"]:
+            return "tuck", None
+        ax, ay = p["aim"]
+        aim = "up" if (ax == 0 and ay < 0) else ("dup" if ay < 0 else ("ddn" if ay > 0 else "fwd"))
+        if p["crouch"]:
+            return "kneel", "fwd"
+        if not p["on"]:
+            return "fall", aim
+        if self.moving(p):
+            return art.RUN[int(p["anim"] * 9) % 4], aim
+        return "stand", aim
+
+    def moving(self, p):
+        return p.get("_moving", False)
+
     def gun_pos(self, p):
-        h = p["hero"]["height"] * (0.6 if p["crouch"] else 1.0)
-        return p["x"] + p["aim"][0] * 7, p["y"] - h * 0.62 + p["aim"][1] * 6
+        pose, aim = self.pose_of(p)
+        ax, ay = p["aim"]
+        if pose == "tuck":
+            return p["x"] + ax * 8, p["y"] - 8 + ay * 8
+        face = 1 if (ax > 0 or (ax == 0 and p["face"] > 0)) else -1
+        dx, hgt = art.muzzle_offset(p["who"], pose, aim, face)
+        return p["x"] + dx, p["y"] - hgt
 
     def fire(self, p):
         gx, gy = self.gun_pos(p)
@@ -344,8 +395,10 @@ class Soldiers(Game):
         if p["weapon"] == "S":
             angles = [base + math.radians(d) for d in (-24, -12, 0, 12, 24)]
         for a in angles:
-            self.bullets.append({"x": gx, "y": gy, "vx": math.cos(a) * 290, "vy": math.sin(a) * 290, "slot": p["slot"]})
+            self.bullets.append({"x": gx, "y": gy, "vx": math.cos(a) * 290, "vy": math.sin(a) * 290, "slot": p["slot"],
+                                 "big": p["weapon"] == "S"})
         p["cool"] = 0.09 if p["weapon"] == "R" else p["hero"]["fire"]
+        p["flash"] = 0.06
         self.sfx("shot")
 
     def kill_player(self, p):
@@ -353,7 +406,7 @@ class Soldiers(Game):
             return
         p["lives"] -= 1
         p["dead"] = 1.4
-        self.puffs.append([p["x"], p["y"] - 12, 4.0, 0.8, (240, 240, 240)])
+        self.boom(p["x"], p["y"] - 12)
         self.sfx("hurt")
 
     # ---------- enemies ----------
@@ -363,8 +416,13 @@ class Soldiers(Game):
             x, kind, y = self.spawns.pop(0)
             if kind.startswith("pickup:"):
                 self.pickups.append({"x": x, "y": y, "kind": kind.split(":")[1], "t": 0.0})
+            elif kind.startswith("capsule:"):
+                self.add_enemy("capsule", self.cam - 16, y)
+                self.enemies[-1]["drop"] = kind.split(":")[1]
             else:
                 self.add_enemy(kind, x, y)
+                if kind == "turret":
+                    self.enemies[-1]["cool"] = 2.2
         if self.boss is None:
             self.wave_t -= dt
             if self.wave_t <= 0:
@@ -373,8 +431,8 @@ class Soldiers(Game):
                 self.add_enemy("runner", self.cam + (W + 14 if side > 0 else -14), GROUND)
 
     def add_enemy(self, kind, x, y):
-        w, h = {"runner": (11, 27), "shooter": (11, 27), "drone": (18, 8), "jeep": (34, 18), "sled": (28, 14),
-                "boat": (40, 14)}[kind]
+        w, h = {"runner": (11, 27), "shooter": (11, 27), "drone": (20, 10), "jeep": (40, 20), "sled": (34, 16),
+                "boat": (44, 16), "turret": (18, 18), "capsule": (18, 12)}[kind]
         self.enemies.append({"kind": kind, "x": float(x), "y": float(y), "w": w, "h": h, "hp": HP[kind], "cool": 1.0 +
                              self.rng.random(), "t": self.rng.random() * 6, "base": float(y), "face": -1, "flash": 0.0})
 
@@ -393,7 +451,7 @@ class Soldiers(Game):
         self.sfx("eshot")
 
     def rect(self, e):
-        if e["kind"] in ("drone", "boat"):
+        if e["kind"] in ("drone", "boat", "turret", "capsule"):
             return pygame.Rect(e["x"] - e["w"] / 2, e["y"] - e["h"] / 2, e["w"], e["h"])
         return pygame.Rect(e["x"] - e["w"] / 2, e["y"] - e["h"], e["w"], e["h"])
 
@@ -426,6 +484,16 @@ class Soldiers(Game):
                     self.ebullets.append({"x": e["x"], "y": e["y"] + 5, "vx": 0.0, "vy": 120.0, "g": 0.0})
             elif k in ("jeep", "sled"):
                 e["x"] -= (120 if k == "jeep" else 165) * dt
+            elif k == "turret":
+                if target:
+                    e["angle"] = math.atan2(target["y"] - 14 - e["y"], target["x"] - e["x"])
+                if e["cool"] <= 0 and self.cam + 10 < e["x"] < self.cam + W - 10:
+                    e["cool"] = max(1.3, 2.4 - 0.2 * self.level) * self.rng.uniform(0.9, 1.2)
+                    a = round(e.get("angle", math.pi) / (math.pi / 6)) * (math.pi / 6)
+                    self.aim_shot(e["x"] + math.cos(a) * 12, e["y"] + math.sin(a) * 12)
+            elif k == "capsule":
+                e["x"] += 112 * dt
+                e["y"] = e["base"] + math.sin(e["t"] * 2.6) * 18
             elif k == "boat":
                 e["x"] -= 85 * dt
                 e["y"] = e["base"] + math.sin(e["t"] * 3) * 2
@@ -451,8 +519,13 @@ class Soldiers(Game):
                     hit = True
                     if e["hp"] <= 0:
                         self.score += POINTS[e["kind"]]
-                        self.puffs.append([e["x"], e["y"] - e["h"] / 2, 4.0, 0.6, (240, 240, 240)])
-                        self.sfx("boom" if e["kind"] in ("jeep", "sled", "boat") else "zap")
+                        r = self.rect(e)
+                        big = e["kind"] in ("jeep", "sled", "boat", "turret")
+                        self.boom(r.centerx, r.centery, big)
+                        self.sfx("boom" if big else "zap")
+                        if e["kind"] == "capsule":
+                            self.pickups.append({"x": e["x"], "y": e["y"], "kind": e.get("drop", "S"), "t": 0.0,
+                                                 "vy": -110.0})
                     else:
                         self.sfx("tick")
                     break
@@ -474,6 +547,19 @@ class Soldiers(Game):
         self.ebullets = [b for b in self.ebullets if not b.get("dead") and self.cam - 20 < b["x"] < self.cam + W + 20
                          and -30 < b["y"] < H + 10]
 
+    def update_pickups(self, dt):
+        for pk in self.pickups:
+            if "vy" in pk:
+                old = pk["y"]
+                pk["vy"] += 420 * dt
+                pk["y"] += pk["vy"] * dt
+                pk["x"] += 30 * dt
+                if pk["vy"] > 0:
+                    floor = self.floor_at(pk["x"], old + 7) - 7
+                    if pk["y"] >= floor:
+                        pk["y"] = floor
+                        del pk["vy"]
+
     # ---------- bosses ----------
     def start_boss(self):
         kind = LEVELS[self.level]["boss"]
@@ -481,7 +567,7 @@ class Soldiers(Game):
         hp = int(base_hp * (1.35 if len(self.players) > 1 else 1.0))
         x = self.length - 90
         spec = {"heli": (74, 30, 80.0), "truck": (72, 36, float(GROUND) - 18), "jet": (120, 30, float(GROUND) - 15),
-                "bunker": (84, 64, float(GROUND) - 32), "gunboat": (110, 34, 214.0)}[kind]
+                "bunker": (80, 70, float(GROUND) - 35), "gunboat": (110, 34, 214.0)}[kind]
         self.boss = {"kind": kind, "x": float(x), "y": spec[2], "w": spec[0], "h": spec[1], "hp": hp, "max": hp,
                      "t": 0.0, "cool": 2.0, "flash": 0.0, "home": float(x),
                      "ports": [18, 18, 18] if kind == "bunker" else None}
@@ -496,9 +582,8 @@ class Soldiers(Game):
         return pygame.Rect(b["x"] - b["w"] / 2, b["y"] - b["h"] / 2, b["w"], b["h"])
 
     def port_rects(self):
-        b = self.boss
         r = self.boss_rect()
-        return [pygame.Rect(r.x + 6 + i * 26, r.y + 14, 18, 12) for i in range(3)]
+        return [pygame.Rect(r.x + 12 + i * 22, r.y + 30, 16, 10) for i in range(3)]
 
     def hit_boss(self, bullet):
         b = self.boss
@@ -510,7 +595,7 @@ class Soldiers(Game):
                     b["flash"] = 0.08
                     self.sfx("tick")
                     if b["ports"][i] == 0:
-                        self.puffs.append([pr.centerx, pr.centery, 6.0, 0.8, (255, 200, 120)])
+                        self.boom(pr.centerx, pr.centery, True)
                         self.sfx("boom")
                     self.check_boss_dead()
                     return True
@@ -528,8 +613,8 @@ class Soldiers(Game):
         if b["hp"] <= 0:
             self.score += 5000 + 1000 * self.level
             for i in range(6):
-                self.puffs.append([b["x"] + self.rng.uniform(-b["w"] / 2, b["w"] / 2),
-                                   b["y"] + self.rng.uniform(-b["h"] / 2, b["h"] / 2), 5.0, 1.2, (255, 190, 90)])
+                self.boom(b["x"] + self.rng.uniform(-b["w"] / 2, b["w"] / 2),
+                          b["y"] + self.rng.uniform(-b["h"] / 2, b["h"] / 2), True)
             self.sfx("boom")
             self.enemies, self.ebullets = [], []
             self.boss_on = False
@@ -593,315 +678,239 @@ class Soldiers(Game):
                 if not p["out"] and not p["dead"] and r.colliderect(self.player_rect(p)):
                     self.kill_player(p)
 
-    # ---------- drawing ----------
+        # ---------- drawing ----------
+    def theme(self):
+        return LEVELS[self.level]["theme"]
+
     def draw_title_art(self, surf):
-        self.draw_backdrop(surf, "carrier", 0)
-        self.draw_soldier(surf, 150, GROUND, self.new_player("miles", 0) | {"aim": (1, 0), "chute": False})
-        self.draw_soldier(surf, 240, GROUND, self.new_player("felix", 1) | {"aim": (-1, 0), "face": -1, "chute": False})
+        th = "island"
+        cam = 40 + self.time * 10
+        art.draw_backdrop(surf, th, cam, self.time)
+        art.draw_ledge(surf, th, 230 - (cam % 1), LEDGE_2, 96, cam)
+        art.draw_ledge(surf, th, 190, LEDGE_1, 190, cam)
+        art.draw_ground(surf, th, cam)
+        surf.blit(art.turret(math.pi * 0.9), (204, 172))
+        miles = self.new_player("miles", 0) | {"aim": (1, -1), "chute": False, "on": True}
+        felix = self.new_player("felix", 1) | {"aim": (1, 0), "chute": False, "on": True, "_moving": True,
+                                              "anim": self.time}
+        self.draw_soldier(surf, 270, LEDGE_2, miles)
+        self.draw_soldier(surf, 90, GROUND, felix)
+        art.muzzle(surf, 112, GROUND - 26, self.time)
+        for i in range(4):
+            bx = 140 + i * 30 + (self.time * 140) % 60
+            surf.fill((255, 250, 200), (int(bx), GROUND - 26, 3, 2))
+        small, big = art.booms()
+        surf.blit(big[int(self.time * 10) % 6], (330, 150))
 
     def draw(self, surf):
         getattr(self, "draw_" + {"drop": "play", "clear": "play"}.get(self.phase, self.phase))(surf)
 
     def draw_select(self, surf):
-        surf.fill((24, 34, 30))
-        text(surf, "CHOOSE YOUR OPERATOR", (W // 2, 12), 26, c.YELLOW, center=True)
-        for i, who in enumerate(("miles", "felix")):
-            x = 110 + i * 180
-            sel = who == self.choice
-            pygame.draw.rect(surf, (70, 140, 90) if sel else (40, 60, 50), (x - 70, 40, 140, 140), border_radius=6)
-            if sel:
-                pygame.draw.rect(surf, c.YELLOW, (x - 70, 40, 140, 140), 2, border_radius=6)
-            big = pygame.Surface((40, 40), pygame.SRCALPHA)
-            self.draw_soldier(big, 20, 39, self.new_player(who, 0) | {"aim": (1, 0), "chute": False})
-            surf.blit(pygame.transform.scale(big, (100, 100)), (x - 50, 44))
-            hero = HEROES[who]
-            text(surf, hero["name"], (x, 146), 22, c.WHITE, center=True)
-            text(surf, hero["unit"], (x, 164), 14, (200, 230, 200), center=True)
-        text(surf, "Left/right: choose   Big button: go", (W // 2, 190), 16, c.WHITE, center=True)
-        lvl = "Start at mission %d of %d (up/down)" % (self.start_level, self.unlocked) if self.unlocked > 1 else "Mission 1"
-        text(surf, lvl, (W // 2, 206), 16, (190, 220, 255), center=True)
-        text(surf, "Player 2 ready!" if self.two else "Player 2: press A on the second gamepad", (W // 2, 222), 14,
-             (250, 200, 120), center=True)
+        art.scene_select(surf, self.pt, self.choice, HEROES, self.start_level, self.unlocked, self.two)
+
+    def briefing_lines(self):
+        lines = ["ORDERS"]
+        for i, p in enumerate(self.players):
+            lines.append("%s %s, %s" % ("To:" if i == 0 else "     ", p["hero"]["name"], p["hero"]["unit"]))
+        lines += ["", "Spies stole the Golden Codebook.", "Follow them from the carrier",
+                  "to their hideout on the island.", "",
+                  "Mission %d: %s" % (self.level + 1, LEVELS[self.level]["name"]),
+                  "Recover the codebook.", "Bring everyone home."]
+        return lines
 
     def draw_briefing(self, surf):
-        surf.fill((14, 18, 16))
-        pygame.draw.rect(surf, (226, 214, 180), (30, 12, W - 60, H - 30))
-        pygame.draw.rect(surf, (170, 40, 40), (W - 120, 18, 80, 16))
-        text(surf, "TOP SECRET", (W - 80, 20), 16, c.WHITE, center=True, shadow=False)
-        lines = ["ORDERS"] + ["%s %s, %s" % ("To:" if i == 0 else "      ", p["hero"]["name"], p["hero"]["unit"])
-                             for i, p in enumerate(self.players)] + [""] + [
-                 "Spies have stolen the Golden Codebook.",
-                 "Track them from the carrier to their island hideout.",
-                 "Recover the codebook. Bring everyone home."]
-        lines = [x for x in lines if x is not None]
-        shown = int(self.pt * 50)
-        y = 40
-        for line in lines:
-            part = line[:max(0, shown)]
-            shown -= len(line)
-            text(surf, part, (42, y), 18 if line == "ORDERS" else 16, (30, 30, 30), shadow=False)
-            y += 22
-        if self.pt > 1.0 and int(self.pt * 2) % 2 == 0:
-            text(surf, "Big button: ACCEPT YOUR ORDERS", (W // 2, H - 40), 20, (30, 110, 40), center=True, shadow=False)
+        art.scene_briefing(surf, self.pt, self.players, self.level, self.briefing_lines())
 
     def draw_plane(self, surf):
-        th = THEMES[LEVELS[self.level]["theme"]]
-        surf.fill(th["sky"])
-        for i in range(6):
-            cx = (i * 90 - int(self.pt * 60)) % (W + 80) - 40
-            pygame.draw.ellipse(surf, (240, 240, 245), (cx, 30 + (i * 37) % 120, 50, 14))
-        px = -120 + self.pt * 170
-        py = 70
-        pygame.draw.rect(surf, (90, 100, 90), (px, py, 120, 22), border_radius=8)      # cargo plane
-        pygame.draw.polygon(surf, (70, 80, 70), [(px + 40, py + 6), (px + 70, py + 6), (px + 60, py - 22), (px + 48, py - 22)])
-        pygame.draw.polygon(surf, (70, 80, 70), [(px, py), (px - 12, py - 18), (px + 8, py)])
-        pygame.draw.circle(surf, (180, 210, 230), (int(px + 112), py + 8), 4)
-        if self.pt > 1.6:
-            for i, p in enumerate(self.players):
-                t = self.pt - 1.6 - i * 0.25
-                if t > 0:
-                    jx = px - 120 * (t) + 40
-                    jy = py + 20 + t * 70
-                    if t > 0.5:
-                        pygame.draw.arc(surf, (230, 230, 230), (jx - 10, jy - 24, 20, 18), 0, math.pi, 3)
-                    self.draw_soldier(surf, jx, jy, p | {"aim": (1, 0)})
-        text(surf, "MISSION %d: %s" % (self.level + 1, LEVELS[self.level]["name"]), (W // 2, 200), 22, c.WHITE,
-             center=True)
+        lv = LEVELS[self.level]
+        art.scene_plane(surf, self.pt, lv["theme"], self.level, lv["name"], self.players)
 
     def draw_victory(self, surf):
-        surf.fill((20, 30, 60))
-        for i in range(24):
-            x = (i * 53 + int(self.pt * 80)) % W
-            y = (i * 31 + int(self.pt * 40)) % 120
-            pygame.draw.circle(surf, [(250, 200, 80), (120, 220, 255), (250, 120, 160)][i % 3], (x, y), 2)
-        text(surf, "MISSION ACCOMPLISHED", (W // 2, 50), 30, c.YELLOW, center=True)
-        text(surf, "The Golden Codebook is safe.", (W // 2, 90), 20, c.WHITE, center=True)
-        text(surf, "Everyone comes home.", (W // 2, 110), 20, c.WHITE, center=True)
-        for i, p in enumerate(self.players):
-            self.draw_soldier(surf, W // 2 - 20 + i * 40, 190, p | {"aim": (0, -1), "dead": 0, "chute": False})
-
-    def draw_backdrop(self, surf, theme, cam):
-        th = THEMES[theme]
-        surf.fill(th["sky"])
-        off = int(cam * 0.3)
-        if theme == "carrier":
-            pygame.draw.rect(surf, (40, 90, 150), (0, 150, W, 90))
-            for i in range(-1, 6):
-                x = i * 120 - off % 120
-                pygame.draw.polygon(surf, (70, 74, 82), [(x, 150), (x + 30, 120), (x + 60, 150)])
-        elif theme == "base":
-            for i in range(-1, 8):
-                x = i * 70 - off % 70
-                pygame.draw.rect(surf, (120, 90, 70), (x, 120, 50, 40))
-                pygame.draw.polygon(surf, (90, 60, 50), [(x - 4, 120), (x + 25, 104), (x + 54, 120)])
-            for x in range(-(off % 8), W, 8):
-                pygame.draw.line(surf, (110, 110, 110), (x, 168), (x + 8, 184))
-        elif theme == "airfield":
-            for i in range(-1, 5):
-                x = i * 150 - off % 150
-                pygame.draw.rect(surf, (140, 140, 150), (x, 110, 110, 60))
-                pygame.draw.ellipse(surf, (120, 120, 130), (x, 96, 110, 30))
-                pygame.draw.rect(surf, (60, 60, 70), (x + 30, 130, 50, 40))
-        elif theme == "snow":
-            for i in range(-1, 6):
-                x = i * 110 - off % 110
-                pygame.draw.polygon(surf, (150, 160, 190), [(x, 170), (x + 55, 70), (x + 110, 170)])
-                pygame.draw.polygon(surf, (250, 250, 255), [(x + 40, 98), (x + 55, 70), (x + 70, 98)])
-            for i in range(40):
-                sx = (i * 47 + int(self.time * 20) - off) % W
-                sy = (i * 29 + int(self.time * 40)) % H
-                surf.set_at((sx, sy), (255, 255, 255))
-        else:
-            pygame.draw.circle(surf, (255, 220, 120), (300, 70), 24)
-            for i in range(-1, 6):
-                x = i * 100 - off % 100
-                pygame.draw.rect(surf, (110, 80, 50), (x + 40, 120, 4, 50))
-                for a in range(0, 360, 60):
-                    pygame.draw.line(surf, th["far"], (x + 42, 120),
-                                     (x + 42 + int(16 * math.cos(math.radians(a))), 120 + int(10 * math.sin(math.radians(a)))), 3)
+        art.scene_victory(surf, self.pt, self.players)
 
     def draw_play(self, surf):
-        lv = LEVELS[self.level]
-        th = THEMES[lv["theme"]]
+        th = self.theme()
         cam = int(self.cam)
-        self.draw_backdrop(surf, lv["theme"], cam)
-        pygame.draw.rect(surf, th["ground"], (0, GROUND, W, H - GROUND))
-        pygame.draw.rect(surf, th["edge"], (0, GROUND, W, 2))
-        if lv["theme"] == "carrier":                     # flight deck markings
-            for x in range(-(cam % 36), W, 36):
-                pygame.draw.rect(surf, (230, 200, 60), (x, GROUND + 10, 18, 2))
-            pygame.draw.line(surf, (235, 235, 235), (0, GROUND + 22), (W, GROUND + 22), 1)
-        if lv["theme"] == "island":
-            pygame.draw.rect(surf, (40, 110, 170), (0, SEA_TOP, W, H - SEA_TOP))
-            for x in range(-(cam % 24), W, 24):
-                pygame.draw.line(surf, (120, 190, 230), (x, SEA_TOP + 6), (x + 10, SEA_TOP + 6))
-        elif lv["theme"] == "airfield":
-            for x in range(-(cam % 40), W, 40):
-                pygame.draw.rect(surf, (240, 240, 240), (x, GROUND + 14, 20, 3))
-        for px, py, pw in self.platforms:
-            sx = px - cam
+        art.draw_backdrop(surf, th, self.cam, self.time)
+        for px_, py_, pw in sorted(self.platforms, key=lambda pl: pl[1]):
+            sx = px_ - cam
             if -pw < sx < W:
-                pygame.draw.rect(surf, th["plat"], (sx, py, pw, 8))
-                pygame.draw.rect(surf, c.INK, (sx, py, pw, 8), 1)
-                pygame.draw.line(surf, th["plat"], (sx + 4, py + 8), (sx + 4, GROUND), 2)
-                pygame.draw.line(surf, th["plat"], (sx + pw - 4, py + 8), (sx + pw - 4, GROUND), 2)
+                art.draw_ledge(surf, th, sx, py_, pw, cam)
+        art.draw_ground(surf, th, cam)
+        if th == "island":
+            pygame.draw.rect(surf, (30, 96, 166), (0, SEA_TOP, W, H - SEA_TOP))
+            for i in range(14):
+                x = (i * 37 - cam) % (W + 20) - 10
+                pygame.draw.line(surf, (130, 196, 240), (x, SEA_TOP + 4 + (i % 3) * 7), (x + 9, SEA_TOP + 4 + (i % 3) * 7))
+        for e in self.enemies:
+            if e["kind"] == "turret":
+                self.draw_enemy(surf, e, cam)
+        if self.boss is not None and self.boss["hp"] > 0:
+            self.draw_boss(surf, cam)
         for pk in self.pickups:
             pk["t"] += 1 / 60
-            y = pk["y"] + math.sin(pk["t"] * 3) * 3
-            pygame.draw.ellipse(surf, (220, 60, 60), (pk["x"] - cam - 9, y - 6, 18, 12))
-            text(surf, pk["kind"], (int(pk["x"] - cam), int(y) - 6), 14, c.WHITE, center=True, shadow=False)
-        if self.boss is not None and self.boss["hp"] > 0:
-            self.draw_boss(surf, cam, th)
+            img = art.pickup_badge(pk["kind"], pk["t"])
+            bob = 0 if "vy" in pk else math.sin(pk["t"] * 4) * 2
+            surf.blit(img, (int(pk["x"] - cam - img.get_width() / 2), int(pk["y"] + bob - img.get_height() / 2)))
         for e in self.enemies:
-            self.draw_enemy(surf, e, cam, th)
+            if e["kind"] != "turret":
+                self.draw_enemy(surf, e, cam)
         for p in self.players:
-            if not p["out"] and not p["dead"] and not (p["inv"] > 0 and int(self.time * 12) % 2 and not p["chute"]):
-                self.draw_soldier(surf, p["x"] - cam, p["y"], p)
+            if p["out"]:
+                continue
+            if p["dead"]:
+                if int(self.time * 10) % 2:
+                    img = art.lying(p["who"], p["face"])
+                    surf.blit(img, (int(p["x"] - cam - img.get_width() / 2), int(p["y"] - img.get_height() + 1)))
+                continue
+            if p["inv"] > 0 and int(self.time * 12) % 2 and not p["chute"]:
+                continue
+            self.draw_soldier(surf, p["x"] - cam, p["y"], p)
         for b in self.bullets:
-            pygame.draw.circle(surf, (255, 240, 120), (int(b["x"] - cam), int(b["y"])), 2)
+            x, y = int(b["x"] - cam), int(b["y"])
+            if b.get("big"):
+                pygame.draw.circle(surf, (240, 60, 40), (x, y), 3)
+                pygame.draw.circle(surf, (255, 240, 200), (x, y), 1)
+            else:
+                surf.fill((255, 250, 190), (x - 1, y - 1, 3, 3))
+                surf.set_at((x, y), (255, 255, 255))
         for b in self.ebullets:
-            pygame.draw.circle(surf, (255, 90, 80), (int(b["x"] - cam), int(b["y"])), 3)
-        for x, y, r, t, col in self.puffs:
-            pygame.draw.circle(surf, col, (int(x - cam), int(y)), int(r))
+            x, y = int(b["x"] - cam), int(b["y"])
+            pygame.draw.circle(surf, art.OUT, (x, y), 3)
+            pygame.draw.circle(surf, (240, 50, 40), (x, y), 2)
+            surf.set_at((x - 1, y - 1), (255, 220, 200))
+        small, big = art.booms()
+        for x, y, age, is_big in self.puffs:
+            frames = big if is_big else small
+            img = frames[min(5, int(age / 0.07))]
+            surf.blit(img, (int(x - cam - img.get_width() / 2), int(y - img.get_height() / 2)))
         self.draw_hud(surf)
         if self.banner[1] > 0 and self.state != "over":
-            text(surf, self.banner[0], (W // 2, 60), 24, c.YELLOW, center=True)
+            art.say(surf, self.banner[0], (W // 2, 54), 24, c.YELLOW)
         if self.phase == "clear":
-            text(surf, "MISSION COMPLETE!", (W // 2, 90), 32, c.YELLOW, center=True)
+            art.say(surf, "MISSION COMPLETE!", (W // 2, 84), 34, c.YELLOW)
 
     def draw_hud(self, surf):
-        pygame.draw.rect(surf, (16, 20, 18), (0, 0, W, 15))
-        text(surf, "%d" % int(self.score), (W // 2 - 20, 1), 16, c.WHITE)
+        medal = art.medal()
         for i, p in enumerate(self.players):
-            x = 4 if i == 0 else W - 120
-            label = "%s %s" % (p["hero"]["name"], "OUT" if p["out"] else "x%d" % max(0, p["lives"]))
+            right = i == 1
+            x = W - 8 if right else 6
+            art.say(surf, "%dP" % (i + 1), (x - 14 if right else x, 2), 14, (120, 200, 255) if not right else (255, 170, 120),
+                    center=False)
+            if p["out"]:
+                art.say(surf, "OUT", (x - 40 if right else x + 18, 2), 14, (200, 200, 200), center=False)
+                continue
+            for k in range(min(6, max(0, p["lives"]))):
+                mx = x - 26 - k * 10 if right else x + 18 + k * 10
+                surf.blit(medal, (mx, 2))
             if p["weapon"] != "N":
-                label += "  [%s]" % p["weapon"]
-            text(surf, label, (x, 1), 16, (200, 240, 200) if i == 0 else (250, 210, 140))
+                badge = art.pickup_badge(p["weapon"], 0)
+                surf.blit(badge, (x - 40 - 6 * 10 if right else x + 18 + 6 * 10, 2))
+        art.say(surf, "%06d" % int(self.score), (W // 2, 2), 16, (255, 255, 255))
         if self.boss is not None and self.boss["hp"] > 0:
             b = self.boss
-            pygame.draw.rect(surf, (60, 20, 20), (100, 20, 200, 6))
-            pygame.draw.rect(surf, (240, 70, 60), (100, 20, int(200 * b["hp"] / b["max"]), 6))
+            pygame.draw.rect(surf, art.OUT, (139, 19, 122, 8))
+            pygame.draw.rect(surf, (90, 20, 20), (140, 20, 120, 6))
+            pygame.draw.rect(surf, (240, 70, 60), (140, 20, int(120 * b["hp"] / b["max"]), 6))
+            pygame.draw.line(surf, (255, 170, 150), (140, 20), (140 + int(120 * b["hp"] / b["max"]), 20))
 
     def draw_soldier(self, surf, x, feet, p):
-        hero = p["hero"]
-        h = hero["height"] * (0.62 if p.get("crouch") else 1.0)
-        k = hero["height"] / 24.0
-        x, feet = int(x), int(feet)
-        def sx(v):
-            return int(round(v * k))
-        top = feet - int(h)
-        uni, vest = hero["uniform"], hero["vest"]
+        pose, aim = self.pose_of(p)
+        face = p["face"]
+        if aim and p["aim"][0]:
+            face = 1 if p["aim"][0] > 0 else -1
+        if pose == "tuck":
+            img = art.tuck(p["who"], int(self.time * 14), face)
+            surf.blit(img, (int(x - img.get_width() / 2), int(feet - 22)))
+            return
         if p.get("chute"):
-            pygame.draw.arc(surf, (230, 232, 236), (x - 16, top - 26, 32, 26), 0, math.pi, 4)
-            pygame.draw.line(surf, (200, 200, 200), (x - 15, top - 13), (x - 3, top + 4))
-            pygame.draw.line(surf, (200, 200, 200), (x + 15, top - 13), (x + 3, top + 4))
-        leg_h = int(h * 0.38)
-        step = int(p.get("anim", 0) * 10) % 2 if p.get("on") else 0
-        pygame.draw.rect(surf, uni, (x - sx(4) + step, feet - leg_h, sx(3), leg_h))
-        pygame.draw.rect(surf, uni, (x + sx(1) - step, feet - leg_h, sx(3), leg_h))
-        pygame.draw.rect(surf, (40, 34, 30), (x - sx(5) + step, feet - 2, sx(4), 2))
-        pygame.draw.rect(surf, (40, 34, 30), (x + sx(1) - step, feet - 2, sx(4), 2))
-        body_top = top + int(h * 0.26)
-        pygame.draw.rect(surf, uni, (x - sx(5), body_top, sx(10), feet - leg_h - body_top + 1))
-        pygame.draw.rect(surf, vest, (x - sx(4), body_top + 2, sx(8), max(2, int(h * 0.22))))
-        head = int(h * 0.24)
-        f = 1 if p.get("face", 1) > 0 else -1
-        pygame.draw.rect(surf, SKIN, (x - sx(3), top + 2, sx(7), head))
-        pygame.draw.rect(surf, BLOND, (x - sx(4), top, sx(9), sx(3)))                 # blond hair
-        pygame.draw.rect(surf, BLOND_D, (x - sx(4) if f > 0 else x + sx(2), top + 1, sx(3), sx(4)))
-        pygame.draw.rect(surf, c.INK, (x + (sx(1) if f > 0 else -sx(2)), top + sx(4), 2, 2))   # eye
-        ax, ay = p.get("aim", (1, 0))
-        gx, gy = x + ax * sx(2), body_top + sx(3)
-        pygame.draw.line(surf, (34, 34, 38), (gx, gy), (gx + ax * sx(10), gy + ay * sx(10)), 3)
+            ch = art.chute()
+            surf.blit(ch, (int(x - ch.get_width() / 2), int(feet - p["hero"]["height"] - 26)))
+        img, ax = art.figure(p["who"], pose, aim, face)
+        surf.blit(img, (int(x - ax), int(feet - img.get_height() + 1)))
+        if p.get("flash", 0) > 0:
+            dx, hgt = art.muzzle_offset(p["who"], pose, aim, face)
+            art.muzzle(surf, x + dx, feet - hgt, 0)
 
-    def draw_enemy(self, surf, e, cam, th):
-        x, y = int(e["x"] - cam), int(e["y"])
+    def draw_enemy(self, surf, e, cam):
+        x, y = e["x"] - cam, e["y"]
         k = e["kind"]
         flash = e["flash"] > 0
         if k in ("runner", "shooter"):
-            suit = (240, 240, 240) if flash else ((26, 26, 30) if k == "shooter" else th["guard"])
-            top = y - 27
-            pygame.draw.rect(surf, suit, (x - 5, top + 7, 10, 20))
-            pygame.draw.rect(surf, (20, 20, 24), (x - 1, top + 18, 2, 9))              # gap between the legs
-            if k == "shooter":
-                pygame.draw.rect(surf, (240, 240, 240), (x - 1, top + 8, 3, 7))    # white shirt and tie
-                pygame.draw.rect(surf, (170, 30, 40), (x, top + 9, 1, 5))
-            pygame.draw.rect(surf, SKIN, (x - 4, top, 8, 7))
-            pygame.draw.rect(surf, c.INK, (x - 4, top + 2, 8, 2))                 # sunglasses
             if k == "runner":
-                pygame.draw.rect(surf, th["guard"] if not flash else c.WHITE, (x - 5, top - 2, 10, 3))
-            pygame.draw.line(surf, c.INK, (x, top + 12), (x + e["face"] * 10, top + 12), 3)
-        elif k == "drone":
-            col = c.WHITE if flash else (60, 60, 70)
-            pygame.draw.rect(surf, col, (x - 6, y - 3, 12, 6))
-            for dx in (-9, 9):
-                pygame.draw.line(surf, (180, 180, 190), (x + dx - 4, y - 5), (x + dx + 4, y - 5), 2)
-            pygame.draw.circle(surf, (240, 60, 60), (x, y + 2), 1)
-        elif k in ("jeep", "sled"):
-            col = c.WHITE if flash else ((80, 96, 60) if k == "jeep" else (200, 50, 50))
-            r = self.rect(e)
-            r.x -= cam
-            pygame.draw.rect(surf, col, r, border_radius=3)
-            if k == "jeep":
-                for wx in (r.x + 6, r.right - 6):
-                    pygame.draw.circle(surf, c.INK, (wx, r.bottom), 4)
-                pygame.draw.rect(surf, (40, 56, 76), (r.x + 4, r.y + 3, 8, 6))
+                fr = int(e["t"] * 10) % 4
+                img, ax = art.figure("guard", art.RUN[fr], "fwd", e["face"], self.theme(), 1 if fr % 2 else -1)
             else:
-                pygame.draw.line(surf, c.INK, (r.x - 2, r.bottom + 1), (r.right + 2, r.bottom + 1), 2)
-                pygame.draw.rect(surf, (26, 26, 30), (r.centerx - 3, r.y - 8, 6, 8))
-        elif k == "boat":
-            col = c.WHITE if flash else (60, 60, 70)
-            pygame.draw.polygon(surf, col, [(x - 20, y - 4), (x + 20, y - 4), (x + 14, y + 6), (x - 16, y + 6)])
-            pygame.draw.rect(surf, (26, 26, 30), (x - 2, y - 12, 6, 8))
-            pygame.draw.line(surf, (200, 230, 255), (x + 20, y + 5), (x + 34, y + 7), 2)
+                t = self.nearest_player(e["x"])
+                aim = "fwd"
+                if t is not None:
+                    dy = (t["y"] - 14) - (e["y"] - 18)
+                    dx = abs(t["x"] - e["x"]) + 1
+                    aim = "dup" if dy < -dx * 0.6 else ("ddn" if dy > dx * 0.6 else "fwd")
+                img, ax = art.figure("spy", "stand", aim, e["face"])
+            if flash:
+                img = art.white(img)
+            surf.blit(img, (int(x - ax), int(y - img.get_height() + 1)))
+            return
+        if k == "turret":
+            img = art.turret(e.get("angle", math.pi), flash)
+        elif k == "capsule":
+            img = art.capsule(e["t"])
+        elif k == "drone":
+            img = art.drone(e["t"])
+        elif k == "jeep":
+            img = art.jeep()
+        elif k == "sled":
+            img = art.sled()
+        else:
+            img = art.boat()
+        if flash and k != "turret":
+            img = art.white(img)
+        if k in ("jeep", "sled"):
+            surf.blit(img, (int(x - img.get_width() / 2), int(y - img.get_height() + 2)))
+        else:
+            surf.blit(img, (int(x - img.get_width() / 2), int(y - img.get_height() / 2)))
+            if k == "boat":
+                for i in range(3):
+                    surf.fill((240, 250, 255), (int(x + 22 + i * 5), int(y + 6 + i % 2), 4, 1))
 
-    def draw_boss(self, surf, cam, th):
+    def draw_boss(self, surf, cam):
         b = self.boss
-        r = self.boss_rect()
-        r.x -= cam
-        flash = b["flash"] > 0
         k = b["kind"]
-        dark = (250, 250, 250) if flash else (40, 44, 50)
-        if k == "heli":
-            pygame.draw.ellipse(surf, dark, (r.x, r.y + 4, r.w - 20, r.h - 6))
-            pygame.draw.rect(surf, dark, (r.right - 26, r.centery - 2, 26, 5))
-            pygame.draw.circle(surf, (120, 200, 240), (r.x + 12, r.centery + 2), 6)
-            blade = int(math.sin(self.time * 40) * 30)
-            pygame.draw.line(surf, (200, 200, 200), (r.centerx - 10 - blade, r.y + 2), (r.centerx - 10 + blade, r.y + 2), 2)
-        elif k == "truck":
-            pygame.draw.rect(surf, (250, 250, 250) if flash else (70, 80, 60), r, border_radius=4)
-            pygame.draw.rect(surf, dark, (r.x + 10, r.y - 10, 24, 10))
-            pygame.draw.line(surf, dark, (r.x + 10, r.y - 6), (r.x - 8, r.y - 12), 4)
-            for wx in (r.x + 10, r.centerx, r.right - 10):
-                pygame.draw.circle(surf, c.INK, (wx, r.bottom), 7)
-        elif k == "jet":
-            pygame.draw.ellipse(surf, (250, 250, 250) if flash else (180, 186, 196), r)
-            pygame.draw.polygon(surf, (150, 156, 166), [(r.centerx, r.y + 6), (r.centerx + 30, r.y - 18), (r.centerx + 44, r.y + 6)])
-            pygame.draw.rect(surf, (40, 56, 76), (r.x + 8, r.y + 8, 16, 6))
-            text(surf, "SPY AIR", (r.centerx, r.centery - 2), 14, (170, 40, 40), center=True, shadow=False)
-        elif k == "bunker":
-            pygame.draw.rect(surf, (250, 250, 250) if flash else (120, 124, 130), r)
-            pygame.draw.rect(surf, (236, 240, 248), (r.x - 4, r.y - 6, r.w + 8, 8))       # snow on the roof
-            for i, pr in enumerate(self.port_rects()):
-                pr.x -= cam
-                pygame.draw.rect(surf, (20, 20, 24) if b["ports"][i] > 0 else (90, 70, 60), pr)
-                if b["ports"][i] > 0:
-                    pygame.draw.rect(surf, (240, 70, 60), (pr.x + 7, pr.y + 4, 4, 4))
+        img = art.boss_sprite(k, self.time, b["hp"] / float(b["max"]))
+        if b["flash"] > 0:
+            img = art.white(img) if k != "bunker" else img
+        r = self.boss_rect()
+        x = r.centerx - cam - img.get_width() / 2
+        if k in ("truck", "jet", "bunker"):
+            y = r.bottom - img.get_height() + 6
         elif k == "gunboat":
-            pygame.draw.polygon(surf, (250, 250, 250) if flash else (60, 64, 72),
-                                [(r.x, r.y + 4), (r.right, r.y + 4), (r.right - 12, r.bottom), (r.x + 8, r.bottom)])
-            pygame.draw.rect(surf, (90, 94, 102), (r.centerx - 16, r.y - 12, 32, 16))
-            pygame.draw.line(surf, dark, (r.x + 20, r.y), (r.x + 4, r.y - 10), 4)
-            if int(b["t"]) % 2 == 0:       # the spymaster pops out of the hatch
-                pygame.draw.rect(surf, (26, 26, 30), (r.centerx - 4, r.y - 24, 9, 12))
-                pygame.draw.rect(surf, SKIN, (r.centerx - 3, r.y - 30, 7, 6))
-                pygame.draw.rect(surf, c.INK, (r.centerx - 3, r.y - 28, 7, 2))
+            y = r.bottom - img.get_height() + 6
+        else:
+            y = r.centery - img.get_height() / 2
+        surf.blit(img, (int(x), int(y)))
+        if k == "bunker":
+            for i, pr in enumerate(self.port_rects()):
+                pr = pr.move(-cam, 0)
+                pygame.draw.rect(surf, art.OUT, pr.inflate(2, 2))
+                if b["ports"][i] > 0:
+                    pygame.draw.rect(surf, (20, 20, 26), pr)
+                    hot = b["flash"] > 0 and int(self.time * 30) % 2
+                    pygame.draw.circle(surf, (255, 255, 255) if hot else (240, 60, 50), pr.center, 3)
+                    pygame.draw.line(surf, (150, 154, 166), pr.center, (pr.x - 4, pr.centery + 2), 2)
+                else:
+                    pygame.draw.rect(surf, (70, 58, 50), pr)
+                    pygame.draw.line(surf, (40, 30, 26), pr.topleft, pr.bottomright)
+        if k == "gunboat" and int(b["t"]) % 2 == 0:
+            spy = art.spymaster()
+            surf.blit(spy, (int(r.centerx - cam - 2), int(y - 12)))
+        if k in ("heli", "jet", "truck") and b["hp"] < b["max"] * 0.4 and int(self.time * 8) % 2:
+            surf.fill((80, 80, 84), (int(r.centerx - cam + 6), int(r.y - 4), 5, 5))
 
     def render(self, surf):
         super().render(surf)
         if self.state == "over" and self.win:
-            text(surf, "Codebook recovered!", (W // 2, 30), 22, c.YELLOW, center=True)
+            art.say(surf, "Codebook recovered!", (W // 2, 30), 22, c.YELLOW)
 
 
 def make(**kw):
