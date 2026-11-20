@@ -12,18 +12,18 @@ GROUND = 198
 DOG_X = 44
 
 PAL = {"W": (250, 250, 246), "G": (206, 206, 214), "K": (30, 30, 36), "P": (240, 130, 150),
-       "S": (160, 160, 172)}
+       "S": (160, 160, 172), "g": (158, 158, 166)}   # g: Mazee's grey patches
 
 _BODY = [
-    "...................WWW....",
-    "..WW..............WWWWWW..",
+    "...................ggW....",
+    "..gW..............WgWWWW..",
     ".WWWW............WWWWWWWW.",
     ".WWWW...........WWWWKWWWW.",
-    "..WWW...........WWWWWWWKK.",
-    "..WWW...........GWWWWWWW..",
-    "...WWWWWWWWWWWWWWWWWWPP...",
-    "..WWWWWWWWWWWWWWWWWWW.....",
-    "..WWWWWWWWWWWWWWWWWWW.....",
+    "..WWW...........WWWWWWgKK.",
+    "..WWW...........GWWWWggW..",
+    "...WWWWWWggggWWWWWWWWPP...",
+    "..WWWWWgggggggWWWWWWW.....",
+    "..WWWWWWgggggWWWWgWWW.....",
     "..WWWWWWWWWWWWWWWWWW......",
     "..GWWWWWWWWWWWWWWWWG......",
     "..GGWWWWWWWWWWWWWGG.......",
@@ -36,10 +36,10 @@ _LEGS = [
     ["..WWW...WW.WW....WWW......", ".WW......WWW.......WW.....", ".........................."],
 ]
 _DUCK = [
-    "..................WWWW....",
-    "..WW.............WWWWWWW..",
-    ".WWWWWWWWWWWWWWWWWWWKWWWW.",
-    ".WWWWWWWWWWWWWWWWWWWWWWKK.",
+    "..................ggWW....",
+    "..gW.............WgWWWWW..",
+    ".WWWWWWggggggWWWWWWWKWWWW.",
+    ".WWWWWgggggggWWWWWWWWWgKK.",
     "..WWWWWWWWWWWWWWWWWWWWPP..",
     "..GWWWWWWWWWWWWWWWWWG.....",
     "..GGGWWGGGGGGGWWWGGG......",

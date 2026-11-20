@@ -121,6 +121,16 @@ def _effects():
         "stairs":   lambda: chain(*[tone(note_freq(n), 0.06, sq, 0.25, 0.25) for n in ("C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6")]),
         "queen":    lambda: chain(tone(110, 0.3, sq, 0.5, 0.35, vibrato=7), tone(98, 0.5, sq, 0.5, 0.35, vibrato=7)),
         "queen_hit": lambda: mix(tone(500, 0.1, sq, 0.5, 0.25, slide=250), tone(2000, 0.08, nz, vol=0.2)),
+        "ring":     lambda: chain(*[mix(tone(1400, 0.045, sq, 0.5, 0.18), tone(1750, 0.045, sq, 0.5, 0.12)) for _ in range(6)], rest(0.25),
+                                  *[mix(tone(1400, 0.045, sq, 0.5, 0.18), tone(1750, 0.045, sq, 0.5, 0.12)) for _ in range(6)]),
+        "siren":    lambda: chain(tone(620, 0.32, sq, 0.5, 0.16, slide=980), tone(980, 0.32, sq, 0.5, 0.16, slide=620),
+                                  tone(620, 0.32, sq, 0.5, 0.16, slide=980)),
+        "crash":    lambda: mix(tone(900, 0.45, nz, vol=0.4, decay=0.14), tone(120, 0.3, tri, vol=0.5, slide=50),
+                                tone(3000, 0.25, nz, vol=0.15, decay=0.06)),
+        "horn":     lambda: mix(tone(392, 0.32, sq, 0.5, 0.18), tone(494, 0.32, sq, 0.5, 0.14)),
+        "turbo":    lambda: mix(tone(150, 0.5, sq, 0.5, 0.18, slide=600), tone(2500, 0.5, nz, vol=0.12)),
+        "skid":     lambda: tone(4200, 0.25, nz, vol=0.16, decay=0.12),
+        "scrape":   lambda: tone(2600, 0.12, nz, vol=0.14, decay=0.05),
         "over":     lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in (("G4", 0.16), ("E4", 0.16), ("C4", 0.16), ("G3", 0.45))]),
         "win":      lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in
                                     (("C5", 0.1), ("E5", 0.1), ("G5", 0.1), ("C6", 0.2), ("G5", 0.1), ("C6", 0.5))]),
@@ -164,6 +174,24 @@ TUNES = {
         "bass": "A2:1 R:1 A2:1 R:1 A2:2 E2:2 " * 4 + "F2:1 R:1 F2:1 R:1 F2:2 C3:2 E2:1 R:1 E2:1 R:1 E2:2 B2:2 " * 2,
         "drum": "K:1 H:1 S:1 H:1 " * 16,
     }),
+    # Uncle T's road: synth rock in A minor. Power chords chug on the eighths under a square-wave lead.
+    "uncle_t": (152, 2, {
+        "lead": "E5:2 A5:2 G5:1 E5:1 D5:2 E5:3 R:1 C5:2 D5:2 F5:2 A5:2 C6:2 A5:2 G5:3 F5:1 E5:2 D5:2 "
+                "E5:1 E5:1 A5:2 B5:1 C6:1 B5:2 A5:3 R:1 E5:2 G5:2 F5:2 E5:1 F5:1 A5:2 C6:2 B5:4 G#5:2 E5:2",
+        "rbass": ("A2:1 A2:1 A3:1 A2:1 A2:1 G2:1 A2:1 C3:1 " * 2 + "F2:1 F2:1 F3:1 F2:1 F2:1 E2:1 F2:1 A2:1 "
+                  "G2:1 G2:1 G3:1 G2:1 G2:1 F2:1 G2:1 B2:1 ") * 1 + "A2:1 A2:1 A3:1 A2:1 A2:1 G2:1 A2:1 C3:1 " * 2
+                 + "F2:1 F2:1 F3:1 F2:1 F2:1 E2:1 F2:1 A2:1 E2:1 E2:1 E3:1 E2:1 E2:1 D2:1 E2:1 G#2:1",
+        "chord": ("A3+E4:1 R:1 A3+E4:1 A3+E4:1 R:1 A3+E4:1 A3+E4:2 " * 2 + "F3+C4:1 R:1 F3+C4:1 F3+C4:1 R:1 F3+C4:1 F3+C4:2 "
+                  "G3+D4:1 R:1 G3+D4:1 G3+D4:1 R:1 G3+D4:1 G3+D4:2 ") + "A3+E4:1 R:1 A3+E4:1 A3+E4:1 R:1 A3+E4:1 A3+E4:2 " * 2
+                 + "F3+C4:1 R:1 F3+C4:1 F3+C4:1 R:1 F3+C4:1 F3+C4:2 E3+B3:1 R:1 E3+B3:1 E3+B3:1 R:1 E3+B3:1 E3+B3:2",
+        "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 H:1 " * 8,
+    }),
+    # Hot tub lounge: slow and smooth, until the phone rings.
+    "hottub": (88, 2, {
+        "lead": "E5:3 D5:1 C5:2 A4:2 B4:3 A4:1 G4:4 A4:3 C5:1 E5:2 G5:2 F5:4 E5:4",
+        "bass": "A2:4 E3:4 G2:4 D3:4 F2:4 C3:4 E2:4 B2:4",
+        "drum": "H:2 H:2 H:2 H:2 " * 4,
+    }),
 }
 
 
@@ -184,6 +212,13 @@ def render_tune(name):
                        "S": tone(1500, 0.08, "noise", vol=0.2, decay=0.04),
                        "H": tone(7000, 0.03, "noise", vol=0.07, decay=0.01)}[n]
                 pieces.append(chain(hit[:int(dur * RATE)], rest(max(0.0, dur - len(hit) / RATE))))
+            elif part == "chord":
+                notes = n.split("+")
+                pieces.append(mix(*[tone(note_freq(x), dur * 0.8, "square", 0.5, 0.075, decay=0.14) for x in notes]))
+                pieces.append(rest(dur * 0.2))
+            elif part == "rbass":
+                pieces.append(tone(note_freq(n), dur * 0.85, "square", 0.5, 0.16, decay=0.25))
+                pieces.append(rest(dur * 0.15))
             elif part == "bass":
                 pieces.append(tone(note_freq(n), dur * 0.9, "triangle", vol=0.42) if dur > 0 else None)
                 pieces.append(rest(dur * 0.1))
@@ -203,6 +238,10 @@ class Silent:
         pass
 
     def music(self, name):
+        pass
+
+    def add(self, name, wave):
+        """Register a ready-made sound (a numpy wave at RATE) under a name."""
         pass
 
     def stop_music(self):
@@ -241,6 +280,12 @@ class Player(Silent):
             if name not in self.effects:
                 self.effects[name] = self._sound(self.makers[name](), 0.9 * self.volume)
             self.effects[name].play()
+        except Exception:
+            pass
+
+    def add(self, name, wave):
+        try:
+            self.effects[name] = self._sound(wave, 1.0 * self.volume)
         except Exception:
             pass
 

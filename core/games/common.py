@@ -223,7 +223,10 @@ class Game:
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 140))
             surf.blit(shade, (0, 0))
-            text(surf, "GAME OVER", (W // 2, 60), 44, RED, center=True)
+            if getattr(self, "win", False):
+                text(surf, "YOU WIN!", (W // 2, 60), 44, YELLOW, center=True)
+            else:
+                text(surf, "GAME OVER", (W // 2, 60), 44, RED, center=True)
             text(surf, "Score %d" % self.last_score, (W // 2, 112), 26, WHITE, center=True)
             if self.new_best:
                 text(surf, "New best!", (W // 2, 138), 22, YELLOW, center=True)
