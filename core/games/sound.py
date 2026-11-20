@@ -131,6 +131,9 @@ def _effects():
         "turbo":    lambda: mix(tone(150, 0.5, sq, 0.5, 0.18, slide=600), tone(2500, 0.5, nz, vol=0.12)),
         "skid":     lambda: tone(4200, 0.25, nz, vol=0.16, decay=0.12),
         "scrape":   lambda: tone(2600, 0.12, nz, vol=0.14, decay=0.05),
+        "cry":      lambda: chain(tone(620, 0.22, sq, 0.25, 0.22, slide=480, vibrato=11), tone(700, 0.35, sq, 0.25, 0.22, slide=420, vibrato=11)),
+        "throw":    lambda: chain(tone(300, 0.08, sq, 0.5, 0.25, slide=180), tone(5000, 0.1, nz, vol=0.12, decay=0.05)),
+        "bonk":     lambda: mix(tone(240, 0.1, tri, vol=0.5, slide=120), tone(1800, 0.06, nz, vol=0.2)),
         "over":     lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in (("G4", 0.16), ("E4", 0.16), ("C4", 0.16), ("G3", 0.45))]),
         "win":      lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in
                                     (("C5", 0.1), ("E5", 0.1), ("G5", 0.1), ("C6", 0.2), ("G5", 0.1), ("C6", 0.5))]),
@@ -185,6 +188,14 @@ TUNES = {
                   "G3+D4:1 R:1 G3+D4:1 G3+D4:1 R:1 G3+D4:1 G3+D4:2 ") + "A3+E4:1 R:1 A3+E4:1 A3+E4:1 R:1 A3+E4:1 A3+E4:2 " * 2
                  + "F3+C4:1 R:1 F3+C4:1 F3+C4:1 R:1 F3+C4:1 F3+C4:2 E3+B3:1 R:1 E3+B3:1 E3+B3:1 R:1 E3+B3:1 E3+B3:2",
         "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 H:1 " * 8,
+    }),
+    # Scary Babies: a music-box lullaby in E minor, gone a little wrong.
+    "scary_babies": (126, 2, {
+        "lead": "E5:2 G5:1 F#5:1 E5:2 B4:4 R:2 C5:2 E5:1 D5:1 C5:2 B4:4 R:2 A4:2 C5:1 B4:1 A4:2 G4:2 B4:2 E5:2 "
+                "D#5:2 F#5:2 A5:2 G5:4 F#5:2",
+        "bass": "E3:2 B3:2 B3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 G3:2 G3:2 "
+                "B2:2 F#3:2 F#3:2 E3:2 B3:2 E3:2",
+        "drum": "K:2 H:2 H:2 " * 8,
     }),
     # Hot tub lounge: slow and smooth, until the phone rings.
     "hottub": (88, 2, {

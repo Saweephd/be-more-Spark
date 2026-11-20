@@ -6,4 +6,5 @@ GAMES = {
     "bmo_catch": "BMO Catch",
     "angry_poppa": "Angry Poppa",
     "uncle_t": "Uncle T's Big Adventure",
+    "scary_babies": "Scary Babies",
 }
