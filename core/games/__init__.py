@@ -7,4 +7,5 @@ GAMES = {
     "angry_poppa": "Angry Poppa",
     "uncle_t": "Uncle T's Big Adventure",
     "scary_babies": "Scary Babies",
+    "soldiers_vs_spies": "Soldiers vs Spies",
 }

@@ -134,6 +134,13 @@ def _effects():
         "cry":      lambda: chain(tone(620, 0.22, sq, 0.25, 0.22, slide=480, vibrato=11), tone(700, 0.35, sq, 0.25, 0.22, slide=420, vibrato=11)),
         "throw":    lambda: chain(tone(300, 0.08, sq, 0.5, 0.25, slide=180), tone(5000, 0.1, nz, vol=0.12, decay=0.05)),
         "bonk":     lambda: mix(tone(240, 0.1, tri, vol=0.5, slide=120), tone(1800, 0.06, nz, vol=0.2)),
+        "shot":     lambda: mix(tone(900, 0.06, sq, 0.25, 0.16, slide=300), tone(3000, 0.04, nz, vol=0.12, decay=0.02)),
+        "eshot":    lambda: tone(500, 0.08, sq, 0.5, 0.12, slide=250),
+        "tick":     lambda: tone(1300, 0.03, sq, 0.5, 0.14),
+        "boom":     lambda: mix(tone(600, 0.5, nz, vol=0.42, decay=0.16), tone(90, 0.45, tri, vol=0.55, slide=35)),
+        "drone":    lambda: mix(tone(70, 1.6, sq, 0.5, 0.16, vibrato=4), tone(105, 1.6, sq, 0.5, 0.08)),
+        "whoosh":   lambda: tone(2000, 0.5, nz, vol=0.2, decay=0.3),
+        "orders":   lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.25) for n, d in (("G4", 0.12), ("C5", 0.12), ("E5", 0.12), ("G5", 0.36))]),
         "over":     lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in (("G4", 0.16), ("E4", 0.16), ("C4", 0.16), ("G3", 0.45))]),
         "win":      lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in
                                     (("C5", 0.1), ("E5", 0.1), ("G5", 0.1), ("C6", 0.2), ("G5", 0.1), ("C6", 0.5))]),
@@ -196,6 +203,22 @@ TUNES = {
         "bass": "E3:2 B3:2 B3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 G3:2 G3:2 "
                 "B2:2 F#3:2 F#3:2 E3:2 B3:2 E3:2",
         "drum": "K:2 H:2 H:2 " * 8,
+    }),
+    # Soldiers vs Spies: a military march in D minor with snare rolls.
+    "soldiers": (144, 2, {
+        "lead": "D5:2 D5:1 D5:1 F5:2 A5:2 G5:2 F5:1 E5:1 D5:4 A4:2 A4:1 A4:1 C5:2 E5:2 D5:2 C5:1 A4:1 D5:4 "
+                "F5:2 F5:1 F5:1 A5:2 D6:2 C6:2 A5:1 G5:1 F5:4 E5:2 F5:1 G5:1 A5:2 C#5:2 D5:6 R:2",
+        "rbass": "D2:1 D2:1 D3:1 D2:1 D2:1 D2:1 D3:1 D2:1 " * 2 + "A1:1 A1:1 A2:1 A1:1 A1:1 A1:1 A2:1 A1:1 "
+                 "D2:1 D2:1 D3:1 D2:1 D2:1 D2:1 D3:1 D2:1 "
+                 "Bb1:1 Bb1:1 Bb2:1 Bb1:1 F2:1 F2:1 F3:1 F2:1 " * 2 + "A1:1 A1:1 A2:1 A1:1 A1:1 A1:1 A2:1 A1:1 "
+                 "D2:1 D2:1 D3:1 D2:1 D2:1 D2:1 D3:1 D2:1",
+        "drum": "K:1 S:1 S:1 S:1 K:1 S:1 K:1 H:1 " * 8,
+    }),
+    # Boss fights: faster and darker.
+    "soldiers_boss": (168, 2, {
+        "lead": "D5:1 D5:1 R:1 D5:1 F5:1 E5:1 D5:1 C5:1 D5:1 D5:1 R:1 D5:1 G5:1 F5:1 E5:1 C#5:1 " * 2,
+        "rbass": "D2:1 D3:1 D2:1 D3:1 D2:1 D3:1 C3:1 C#3:1 " * 4,
+        "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 S:1 " * 4,
     }),
     # Hot tub lounge: slow and smooth, until the phone rings.
     "hottub": (88, 2, {

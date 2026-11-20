@@ -40,6 +40,104 @@ KEYMAP = {
 }
 
 
+PAD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pad.json")
+# Button numbers differ between gamepads; these cover the common layouts. pad.json can override them.
+DEFAULT_PAD = {"a": [0, 2], "b": [1, 3], "start": [6, 7, 9, 10, 11]}
+AXIS_ON, AXIS_OFF = 0.55, 0.35
+
+
+def load_pad_map(path=None):
+    try:
+        with open(path or PAD_FILE) as fh:
+            data = json.load(fh)
+        return {k: [int(x) for x in v] for k, v in data.items() if k in ("a", "b", "start")}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return dict(DEFAULT_PAD)
+
+
+class Pads:
+    """Bluetooth or USB gamepads. Pad 1 drives player one (as do BMO's own buttons); pad 2 drives player two."""
+
+    def __init__(self, pad_map=None):
+        self.map = pad_map or load_pad_map()
+        self.sticks = {}          # instance id -> (slot, joystick)
+        self.inputs = []          # one Input per slot
+        self.dirs = {}            # (slot, source) -> set of directions held from that source
+
+    def slot_for(self, instance_id):
+        entry = self.sticks.get(instance_id)
+        return entry[0] if entry else None
+
+    def add(self, device_index):
+        try:
+            js = pygame.joystick.Joystick(device_index)
+            js.init()
+        except pygame.error:
+            return
+        iid = js.get_instance_id()
+        if iid in self.sticks:
+            return
+        used = {slot for slot, _ in self.sticks.values()}
+        slot = next(i for i in range(8) if i not in used)
+        self.sticks[iid] = (slot, js)
+        while len(self.inputs) <= slot:
+            self.inputs.append(Input())
+
+    def remove(self, instance_id):
+        self.sticks.pop(instance_id, None)
+
+    def button_name(self, button):
+        for name, numbers in self.map.items():
+            if button in numbers:
+                return name
+        return None
+
+    def set_dirs(self, slot, source, active, targets):
+        before = self.dirs.get((slot, source), set())
+        for d in before - active:
+            for t in targets:
+                t.up(d)
+        for d in active - before:
+            for t in targets:
+                t.down(d)
+        self.dirs[(slot, source)] = set(active)
+
+    def handle(self, ev, targets_for):
+        """Feed one pygame event. targets_for(slot) gives the Inputs that pad slot drives."""
+        if ev.type == pygame.JOYDEVICEADDED:
+            self.add(ev.device_index)
+            return True
+        if ev.type == pygame.JOYDEVICEREMOVED:
+            self.remove(ev.instance_id)
+            return True
+        if ev.type not in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP, pygame.JOYHATMOTION, pygame.JOYAXISMOTION):
+            return False
+        slot = self.slot_for(ev.instance_id)
+        if slot is None:
+            return True
+        targets = targets_for(slot)
+        if ev.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
+            name = self.button_name(ev.button)
+            if name:
+                for t in targets:
+                    (t.down if ev.type == pygame.JOYBUTTONDOWN else t.up)(name)
+        elif ev.type == pygame.JOYHATMOTION and ev.hat == 0:
+            x, y = ev.value
+            active = {d for d, on in (("left", x < 0), ("right", x > 0), ("up", y > 0), ("down", y < 0)) if on}
+            self.set_dirs(slot, "hat", active, targets)
+        elif ev.type == pygame.JOYAXISMOTION and ev.axis in (0, 1):
+            key = (slot, "axis")
+            held = set(self.dirs.get(key, set()))
+            neg, pos = ("left", "right") if ev.axis == 0 else ("up", "down")
+            for d, on, off in ((neg, ev.value < -AXIS_ON, ev.value > -AXIS_OFF), (pos, ev.value > AXIS_ON, ev.value < AXIS_OFF)):
+                if on:
+                    held.add(d)
+                elif off:
+                    held.discard(d)
+            self.set_dirs(slot, "axis", held, targets)
+        return True
+
+
 class Input:
     """What the player is doing this frame."""
 
@@ -47,6 +145,7 @@ class Input:
         self.held = set()        # buttons currently down
         self.pressed = set()     # buttons that went down this frame
         self.touch = None        # (x, y) on the 400x240 canvas while a finger is down
+        self.p2 = None           # player two's Input in two-player games, when a second pad is connected
 
     def down(self, name):
         if name not in self.held:
@@ -263,6 +362,23 @@ def run(game, screen=None, max_frames=None):
     canvas = pygame.Surface((W, H))
     clock = pygame.time.Clock()
     inp = Input()
+    try:
+        pygame.joystick.init()
+    except pygame.error:
+        pass
+    pads = Pads()
+    for i in range(pygame.joystick.get_count() if pygame.joystick.get_init() else 0):
+        pads.add(i)
+    coop = getattr(game, "players_max", 1) > 1
+
+    def targets_for(slot):
+        # In two-player games the second pad is player two; every other pad is player one.
+        if coop and slot == 1:
+            while len(pads.inputs) < 2:
+                pads.inputs.append(Input())
+            inp.p2 = pads.inputs[1]
+            return [pads.inputs[1]]
+        return [inp]
     game.sound = _sound.get()
     start_held = 0.0
     frames = 0
@@ -270,6 +386,8 @@ def run(game, screen=None, max_frames=None):
     while running:
         dt = min(clock.tick(FPS) / 1000.0, 1 / 20)
         for ev in pygame.event.get():
+            if pads.handle(ev, targets_for):
+                continue
             if ev.type == pygame.QUIT:
                 running = False
             elif ev.type == pygame.KEYDOWN:
@@ -302,6 +420,8 @@ def run(game, screen=None, max_frames=None):
         pygame.transform.scale(canvas, screen.get_size(), screen)
         pygame.display.flip()
         inp.end_frame()
+        if inp.p2 is not None:
+            inp.p2.end_frame()
         frames += 1
         if max_frames is not None and frames >= max_frames:
             running = False

@@ -77,6 +77,13 @@ def run_menu(screen=None, max_frames=None):
     canvas = pygame.Surface((W, H))
     clock = pygame.time.Clock()
     inp = c.Input()
+    try:
+        pygame.joystick.init()
+    except pygame.error:
+        pass
+    pads = c.Pads()
+    for i in range(pygame.joystick.get_count() if pygame.joystick.get_init() else 0):
+        pads.add(i)
     menu = Menu()
     menu.sound = c._sound.get()
     menu.sound.music("menu")
@@ -86,6 +93,8 @@ def run_menu(screen=None, max_frames=None):
     while not menu.done:
         dt = min(clock.tick(c.FPS) / 1000.0, 1 / 20)
         for ev in pygame.event.get():
+            if pads.handle(ev, lambda slot: [inp]):
+                continue
             if ev.type == pygame.QUIT or (ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE):
                 menu.done = True
             elif ev.type == pygame.KEYDOWN and ev.key in c.KEYMAP:
