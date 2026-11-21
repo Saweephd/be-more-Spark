@@ -5,7 +5,6 @@ import unittest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
-os.environ["BW_PRIVATE_DIR"] = "/nonexistent-private-dir"
 
 try:
     import pygame
@@ -326,9 +325,9 @@ class BlackWarriorTests(unittest.TestCase):
         self.frames(g, inp, 120)
         self.assertLess(g.p.hp, hp)
 
-    def test_portrait_falls_back_without_private_files(self):
-        img = bw_art.portrait(False)
-        self.assertEqual(img.get_size(), (96, 96))
+    def test_drawn_portraits(self):
+        for masked in (False, True):
+            self.assertEqual(bw_art.portrait(masked).get_size(), (96, 96))
 
     def test_voice(self):
         self.assertEqual(extras.match_game("play black warrior"), "black_warrior")

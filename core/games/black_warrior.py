@@ -1,9 +1,9 @@
 """Black Warrior, Level 1: Tower Row. A Double Dragon style beat 'em up.
 
-Victor walks Tower Row with his face showing; when a fight starts he pulls on
+Quick walks Tower Row with his face showing; when a fight starts he pulls on
 his cat mask. He fights up the street, through the Trillion Tower lobby and up
 the glass elevator to the penthouse, where the Trillion Heir waits. When the
-Heir is beaten, Victor opens a rift into the Ninth Dominion, draws the katana
+Heir is beaten, Quick opens a rift into the Ninth Dominion, draws the katana
 Daybreak and cuts the chain on the family vault. The city wins fair taxation
 and Tower Row changes.
 
@@ -62,14 +62,14 @@ SCENES = [
      "weapons": [(330, 196, "pipe")], "token": None},
 ]
 ELEVATOR_STOPS = {15: ["valet", "butler"], 30: ["security", "valet", "butler"], 45: ["security", "security", "butler"]}
-INTRO = [("VICTOR", False, "Tower Row. The Trillion Heir's private kingdom."),
-         ("VICTOR", False, "Rent's up, the bus is cut, the school roof leaks..."),
-         ("VICTOR", False, "...and he pays less tax than the diner."),
-         ("VICTOR", False, "Time somebody sent him a bill.")]
+INTRO = [("QUICK", False, "Tower Row. The Trillion Heir's private kingdom."),
+         ("QUICK", False, "Rent's up, the bus is cut, the school roof leaks..."),
+         ("QUICK", False, "...and he pays less tax than the diner."),
+         ("QUICK", False, "Time somebody sent him a bill.")]
 BOSS_TALK = [("THE TRILLION HEIR", None, "Who let you in? This floor is for people born here."),
-             ("VICTOR", True, "Nice chair. Did you earn it, or did Grandpa leave it to you?"),
+             ("QUICK", True, "Nice chair. Did you earn it, or did Grandpa leave it to you?"),
              ("THE TRILLION HEIR", None, "Butlers! Show this person the stairs!"),
-             ("VICTOR", True, "Your free ride ends tonight.")]
+             ("QUICK", True, "Your free ride ends tonight.")]
 CUT_PHASES = ("katana", "reform")
 
 
@@ -103,7 +103,7 @@ class Enemy(Fighter):
         return self.state != "out"
 
 
-class Victor(Fighter):
+class Quick(Fighter):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.hp = MAX_HP
@@ -147,7 +147,7 @@ class BlackWarrior(Game):
         self.score = 0
         self.win = False
         self.scene_i = 0
-        self.p = Victor(60, 196)
+        self.p = Quick(60, 196)
         self.enemies, self.projs, self.fx, self.weapons = [], [], [], []
         self.bubbles = []
         self.boss = None
@@ -500,7 +500,7 @@ class BlackWarrior(Game):
         elif self.pt > 9.9:
             self.game_over()
 
-    # ------------------------------------------------------------ the world: Victor, enemies, Mazee, things
+    # ------------------------------------------------------------ the world: Quick, enemies, Mazee, things
     def update_world(self, dt, inp, control):
         p = self.p
         p.inv = max(0.0, p.inv - dt)
@@ -508,7 +508,7 @@ class BlackWarrior(Game):
         p.flash = max(0.0, p.flash - dt)
         if control:
             self.read_input(dt, inp)
-        self.update_victor(dt, inp)
+        self.update_hero(dt, inp)
         for e in self.enemies:
             self.update_enemy(e, dt)
         self.enemies = [e for e in self.enemies if e.alive or e.st < 0.9]
@@ -683,7 +683,7 @@ class BlackWarrior(Game):
         e.thrown = True
         self.score += dmg * 10
 
-    def update_victor(self, dt, inp):
+    def update_hero(self, dt, inp):
         p = self.p
         p.st += dt
         held = inp.held if self.phase in ("walk", "fight", "elevator", "boss", "mask_off") else set()
@@ -961,7 +961,7 @@ class BlackWarrior(Game):
                 tx = p.x + side * 90
         else:
             tx = p.x + side * 70
-        if not (self.lo() < tx < self.hi()):        # stay where Victor can reach: never stand off screen
+        if not (self.lo() < tx < self.hi()):        # stay where Quick can reach: never stand off screen
             tx = p.x - side * (e.reach - 2 if e.attacking else 70)
         tx = max(self.lo() + 8, min(self.hi() - 8, tx))
         ty = p.y
@@ -1169,13 +1169,13 @@ class BlackWarrior(Game):
     def sprite_for(self, p):
         s = p.state
         if s == "cut":
-            return art.victor("idle0", p.masked, p.face)
+            return art.hero("idle0", p.masked, p.face)
         if self.phase in ("mask_on", "mask_off"):
             seq = ["idle0", "mask1", "mask2", "mask2", "idle0"]
             k = min(4, int(self.pt / 0.12))
             if self.phase == "mask_off":
                 k = 4 - k
-            return art.victor(seq[k], k >= 3, p.face)
+            return art.hero(seq[k], k >= 3, p.face)
         pose = "idle0"
         if s == "idle":
             pose = "idle0" if int(p.anim * 3) % 2 == 0 else "idle1"
@@ -1188,7 +1188,7 @@ class BlackWarrior(Game):
         elif s in ("hit",):
             pose = "hit"
         elif s in ("fly", "down"):
-            return art.lying(art.victor("hit", p.masked, p.face))
+            return art.lying(art.hero("hit", p.masked, p.face))
         elif s == "getup":
             pose = "getup"
         elif s == "grab":
@@ -1198,10 +1198,10 @@ class BlackWarrior(Game):
         elif s == "dodge":
             pose = "dodge"
         elif s == "special":
-            return art.victor("spin", p.masked, 1 if int(p.st * 14) % 2 == 0 else -1)
+            return art.hero("spin", p.masked, 1 if int(p.st * 14) % 2 == 0 else -1)
         elif s == "flurry":
             pose = ("jab", "cross", "kick", "round", "upper", "spin")[int(p.st * 12) % 6]
-        return art.victor(pose, p.masked, p.face)
+        return art.hero(pose, p.masked, p.face)
 
     def blit_fighter(self, surf, img, x, y, z, face):
         ax = art.HX + 1 if face > 0 else img.get_width() - 2 - art.HX
@@ -1234,7 +1234,7 @@ class BlackWarrior(Game):
             items.append((e.y, 2, "enemy", e))
         if self.mazee is not None:
             items.append((self.mazee["y"], 3, "mazee", self.mazee))
-        items.append((self.p.y, 4, "victor", self.p))
+        items.append((self.p.y, 4, "hero", self.p))
         if self.boss is not None and self.phase in ("boss", "boss_intro"):
             items.append((self.boss["y"], 1, "boss", self.boss))
         items.sort(key=lambda it: (it[0], it[1]))
@@ -1340,7 +1340,7 @@ class BlackWarrior(Game):
         pygame.draw.rect(surf, art.OUT, box.inflate(2, 2))
         surf.blit(small, box)
         pygame.draw.rect(surf, art.BLUE[2], box, 1)
-        art.say(surf, "VICTOR x%d" % max(0, p.lives), (32, 2), 14, (240, 240, 250), center=False)
+        art.say(surf, "QUICK x%d" % max(0, p.lives), (32, 2), 14, (240, 240, 250), center=False)
         segs = int(math.ceil(p.hp / 10.0))
         for i in range(10):
             r = pygame.Rect(32 + i * 7, 14, 6, 5)
@@ -1403,7 +1403,7 @@ class BlackWarrior(Game):
             pose = "draw"
         elif t >= 7.6:
             pose = "victory"
-        vic = art.victor(pose, p.masked, p.face)
+        vic = art.hero(pose, p.masked, p.face)
         art.shadow(surf, p.x, p.y)
         self.blit_fighter(surf, vic, p.x, p.y, 0, p.face)
         if 1.2 <= t < 2.6:
@@ -1460,7 +1460,7 @@ class BlackWarrior(Game):
             art.shadow(surf, x, y)
             img = art.citizen(i, "walk%d" % (int(k * 8 + i) % 4), 1)
             surf.blit(img, (int(x - art.HX - 1), int(y - art.FEET_Y - 1)))
-        vic = art.victor("victory" if int(k) % 4 == 0 else "idle0", False, 1)
+        vic = art.hero("victory" if int(k) % 4 == 0 else "idle0", False, 1)
         art.shadow(surf, 200, 212)
         surf.blit(vic, (200 - art.HX - 1, 212 - art.FEET_Y - 1))
         box = pygame.Rect(30, 18, W - 60, 40)

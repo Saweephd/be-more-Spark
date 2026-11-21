@@ -15,7 +15,7 @@ _GAME_WORDS = {
     "angry_poppa": r"angry ?(poppa|papa|pop|poppy|pappa|puppet|papas?)|the gnat game|the bug game|gnat(s)? game",
     "soldiers_vs_spies": r"soldiers? ?(vs|versus|v|and|against|verses)? ?(the )?spies|soldiers? game|spy game|army game|the war game",
     "scary_babies": r"(scary|scarey|scared|scarry) ?bab(y|ies|e?s)|the baby game|bab(y|ies) game|big baby",
-    "black_warrior": r"black ?(warrior|worrier|warriors|water)|the (fighting|karate|kung fu|street fighting) game|victor'?s game",
+    "black_warrior": r"black ?(warrior|worrier|warriors|water)|the (fighting|karate|kung fu|street fighting) game|quick'?s game",
     "uncle_t": r"uncle ?(t|tee|tea|tease|ts|t's)\b|big adventure|the (driving|car|racing|chase|cop) game|driving game",
 }
 _PLAY = r"\b(play|start|launch|open|run|load|i want to play|let'?s play|can we play)\b"

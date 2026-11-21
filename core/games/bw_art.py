@@ -1,15 +1,10 @@
-"""Art for Black Warrior: Victor, the Tower Row thugs, the Trillion Heir, Mazee, the stages and cutscene pieces.
+"""Art for Black Warrior: Quick, the Tower Row thugs, the Trillion Heir, Mazee, the stages and cutscene pieces.
 
 Characters are assembled from painted parts (head, torso, limbs posed by joint
 angles) with a lit edge, a blue rim light and a dark colored outline, then
 cached. Everything here is drawn in code and original to this project.
-
-Victor's close-up portraits are personal, so they are not in this repository:
-the game loads them from a private folder on BMO (see PRIVATE_DIR) and falls
-back to a masked portrait drawn here when they are missing.
 """
 import math
-import os
 import random
 
 import pygame
@@ -18,7 +13,6 @@ from . import pixart as px
 
 W, H = 400, 240
 OUT = (10, 8, 14)
-PRIVATE_DIR = os.environ.get("BW_PRIVATE_DIR", os.path.expanduser("~/.local/share/bmo-games/private"))
 
 SKIN = [(44, 25, 20), (68, 39, 28), (94, 57, 38), (122, 77, 52), (150, 99, 68), (180, 124, 88)]
 SUIT = [(11, 13, 20), (22, 26, 38), (35, 42, 61), (58, 69, 96)]
@@ -266,7 +260,7 @@ def _place(s, face):
     return s
 
 
-def victor(pose="idle0", masked=True, face=1):
+def hero(pose="idle0", masked=True, face=1):
     key = ("vic", pose, masked, face)
     if key not in _cache:
         s = _figure(VIC_PAL, HEAD_MASK if masked else HEAD_FACE, pose)
@@ -511,12 +505,94 @@ def bubble(surf, msg, x, y):
 
 
 # ------------------------------------------------------------------ portraits
-def _fallback_portrait(masked=True):
-    """A masked portrait drawn here, used when the private portraits are not on this device."""
+def _portrait_bg():
     s = pygame.Surface((96, 96))
     for y in range(96):
         t = y / 95
         s.fill((int(20 + 26 * t), int(15 + 12 * t), int(40 + 34 * t)), (0, y, 96, 1))
+    for x, y, col in [(4, 18, (242, 169, 59)), (10, 30, (255, 210, 122)), (6, 52, (242, 169, 59)),
+                      (86, 12, (79, 180, 255)), (90, 34, (224, 64, 122)), (84, 58, (255, 210, 122))]:
+        s.fill(col, (x, y, 2, 3))
+    return s
+
+
+def _suit_collar(s):
+    pygame.draw.polygon(s, SUIT[1], [(0, 96), (0, 84), (16, 78), (34, 80), (48, 88), (62, 80), (80, 78), (96, 84), (96, 96)])
+    pygame.draw.polygon(s, SUIT[0], [(28, 80), (36, 76), (48, 88), (60, 76), (68, 80), (48, 96)])
+    pygame.draw.line(s, SUIT[3], (16, 78), (34, 80))
+    pygame.draw.line(s, SUIT[3], (62, 80), (80, 78))
+    for k in range(3):
+        pygame.draw.line(s, BLUE[2 - k // 2], (2, 88 + k * 3), (18, 81 + k * 3))
+        pygame.draw.line(s, BLUE[2 - k // 2], (94, 88 + k * 3), (78, 81 + k * 3))
+    pygame.draw.polygon(s, BLUE[2], [(45, 91), (48, 88), (51, 91), (48, 94)])
+
+
+def _quick_face():
+    """Quick, unmasked: an original face. Short twists over a fade, strong jaw, a confident half smile."""
+    s = _portrait_bg()
+    hair, hair2, hair3 = (18, 14, 18), (34, 28, 36), (62, 56, 74)
+    skin = [(40, 24, 18), (62, 37, 26), (86, 53, 36), (112, 71, 48), (140, 92, 63), (168, 116, 82), (196, 146, 108)]
+    # neck and shoulders
+    pygame.draw.polygon(s, skin[2], [(38, 64), (58, 64), (61, 84), (35, 84)])
+    pygame.draw.polygon(s, skin[1], [(50, 64), (58, 64), (61, 84), (52, 84)])
+    # ears
+    for ex in (22, 67):
+        pygame.draw.ellipse(s, skin[2], (ex, 32, 8, 14))
+        pygame.draw.ellipse(s, skin[1], (ex + 2, 35, 4, 8))
+    # head: broad forehead, defined cheekbones, strong squared jaw
+    head = [(29, 22), (34, 13), (42, 9), (54, 9), (62, 13), (67, 22), (69, 34), (68, 46), (65, 57), (59, 66),
+            (52, 71), (44, 71), (37, 66), (31, 57), (28, 46), (27, 34)]
+    pygame.draw.polygon(s, skin[3], head)
+    pygame.draw.polygon(s, skin[2], [(54, 9), (62, 13), (67, 22), (69, 34), (68, 46), (65, 57), (59, 66), (52, 71),
+                                     (55, 60), (59, 48), (60, 34), (57, 20)])                   # shadow side
+    pygame.draw.polygon(s, skin[4], [(33, 24), (40, 16), (46, 16), (40, 26), (36, 40), (32, 40)])  # lit side
+    pygame.draw.polygon(s, skin[4], [(32, 44), (40, 46), (38, 52), (33, 50)])                   # cheekbone
+    pygame.draw.line(s, skin[5], (40, 18), (44, 17))
+    pygame.draw.line(s, skin[1], (59, 50), (55, 62))
+    # hair: faded sides and short twists on top
+    pygame.draw.polygon(s, hair2, [(27, 34), (28, 22), (33, 14), (31, 26), (30, 36)])
+    pygame.draw.polygon(s, hair2, [(69, 34), (67, 22), (62, 14), (65, 26), (66, 36)])
+    for i in range(9):
+        x = 30 + i * 4.4
+        top = 2 + abs(i - 4) * 1.2
+        pygame.draw.rect(s, hair, (int(x), int(top), 5, int(16 - top)), border_radius=2)
+        pygame.draw.line(s, hair3, (int(x) + 1, int(top) + 1), (int(x) + 1, int(top) + 4))
+    pygame.draw.line(s, hair, (31, 16), (65, 16), 2)
+    # brows: straight and strong
+    pygame.draw.line(s, hair, (35, 31), (45, 30), 2)
+    pygame.draw.line(s, hair, (51, 30), (61, 31), 2)
+    # eyes: focused, a little narrowed
+    for cx in (40, 56):
+        pygame.draw.polygon(s, (230, 220, 208), [(cx - 5, 37), (cx - 2, 34), (cx + 3, 34), (cx + 5, 37), (cx + 1, 39), (cx - 3, 39)])
+        pygame.draw.rect(s, (40, 22, 16), (cx - 1, 35, 3, 4))
+        s.set_at((cx, 35), (250, 246, 236))
+        pygame.draw.line(s, (16, 10, 10), (cx - 5, 36), (cx - 2, 33))
+        pygame.draw.line(s, (16, 10, 10), (cx - 2, 33), (cx + 4, 33))
+    # nose: straight bridge, broad base
+    pygame.draw.line(s, skin[2], (49, 38), (50, 48))
+    pygame.draw.polygon(s, skin[2], [(44, 50), (48, 47), (53, 50), (51, 52), (46, 52)])
+    s.set_at((45, 51), skin[0])
+    s.set_at((52, 51), skin[0])
+    s.set_at((48, 48), skin[5])
+    # a confident half smile, higher on one side
+    pygame.draw.lines(s, (60, 26, 24), False, [(40, 57), (43, 59), (51, 59), (55, 57), (57, 54)])
+    pygame.draw.line(s, (236, 230, 220), (45, 58), (52, 58))
+    pygame.draw.line(s, skin[4], (44, 61), (52, 61))
+    pygame.draw.line(s, skin[1], (42, 56), (52, 56))
+    s.set_at((58, 53), skin[2])
+    s.set_at((39, 56), skin[2])
+    # a light beard shadow along the jaw
+    for x, y in ((34, 60), (37, 64), (40, 67), (44, 69), (48, 70), (52, 69), (56, 66), (60, 62), (63, 58),
+                 (38, 62), (46, 66), (54, 65)):
+        s.set_at((x, y), skin[1])
+    pygame.draw.polygon(s, OUT, head, 1)
+    _suit_collar(s)
+    return s
+
+
+def _quick_masked():
+    """Quick, masked: black cowl with short rounded cat ears, blue lenses and the three river lines."""
+    s = _portrait_bg()
     cowl = [(22, 6), (28, -2), (48, -6), (68, -2), (74, 6), (80, 20), (82, 36), (80, 50), (74, 62), (64, 76),
             (56, 81), (40, 81), (32, 76), (22, 62), (16, 50), (14, 36), (16, 20)]
     pygame.draw.polygon(s, SUIT[0], cowl)
@@ -524,36 +600,28 @@ def _fallback_portrait(masked=True):
         pygame.draw.polygon(s, SUIT[0], [(ex - 8 * sgn, 14), (ex + sgn, 2), (ex + 9 * sgn, 8)])
         pygame.draw.polygon(s, BLUE[0], [(ex - 3 * sgn, 10), (ex + sgn, 5), (ex + 5 * sgn, 9)])
     pygame.draw.lines(s, SUIT[3], False, [(74, 6), (80, 20), (82, 36), (80, 50), (74, 62)])
+    pygame.draw.lines(s, SUIT[2], False, [(22, 6), (16, 20), (14, 36), (16, 50)])
+    pygame.draw.line(s, SUIT[2], (26, 30), (42, 33))
+    pygame.draw.line(s, SUIT[2], (70, 30), (54, 33))
     for sgn, cx in ((-1, 38), (1, 58)):
         pygame.draw.polygon(s, BLUE[2], [(cx - 6 * sgn, 40), (cx + 7 * sgn, 35), (cx + 6 * sgn, 40), (cx - 4 * sgn, 43)])
         pygame.draw.line(s, BLUE[3], (cx - 3 * sgn, 39), (cx + 4 * sgn, 37))
     pygame.draw.line(s, BLUE[1], (48, 0), (48, 52))
-    pygame.draw.line(s, BLUE[1], (32, 50), (36, 62)); pygame.draw.line(s, BLUE[1], (64, 50), (60, 62))
-    pygame.draw.polygon(s, SUIT[1], [(0, 96), (0, 84), (16, 78), (34, 80), (48, 88), (62, 80), (80, 78), (96, 84), (96, 96)])
-    for k in range(3):
-        pygame.draw.line(s, BLUE[2 - k // 2], (2, 88 + k * 3), (18, 81 + k * 3))
-        pygame.draw.line(s, BLUE[2 - k // 2], (94, 88 + k * 3), (78, 81 + k * 3))
-    pygame.draw.polygon(s, BLUE[2], [(45, 91), (48, 88), (51, 91), (48, 94)])
+    pygame.draw.line(s, BLUE[0], (46, 4), (46, 26))
+    pygame.draw.line(s, BLUE[0], (50, 4), (50, 26))
+    pygame.draw.line(s, BLUE[1], (32, 50), (36, 62))
+    pygame.draw.line(s, BLUE[1], (64, 50), (60, 62))
+    pygame.draw.line(s, SUIT[2], (42, 70), (54, 70))
+    _suit_collar(s)
     return s
 
 
 def portrait(masked=False):
-    """Victor's 96x96 portrait from the private folder, or the drawn masked fallback."""
+    """Quick's 96x96 portrait, drawn here: unmasked or masked."""
     key = ("portrait", masked)
-    if key in _cache:
-        return _cache[key]
-    name = "victor_portrait_masked.png" if masked else "victor_portrait.png"
-    img = None
-    try:
-        img = pygame.image.load(os.path.join(PRIVATE_DIR, name))
-        if img.get_size() != (96, 96):
-            img = pygame.transform.scale(img, (96, 96))
-    except (pygame.error, FileNotFoundError, OSError):
-        img = None
-    if img is None:
-        img = _fallback_portrait(True)
-    _cache[key] = img
-    return img
+    if key not in _cache:
+        _cache[key] = _quick_masked() if masked else _quick_face()
+    return _cache[key]
 
 
 def heir_portrait():
