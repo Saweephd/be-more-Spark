@@ -156,6 +156,8 @@ def _effects():
         "turbo":    lambda: mix(tone(150, 0.5, sq, 0.5, 0.18, slide=600), tone(2500, 0.5, nz, vol=0.12)),
         "skid":     lambda: tone(4200, 0.25, nz, vol=0.16, decay=0.12),
         "scrape":   lambda: tone(2600, 0.12, nz, vol=0.14, decay=0.05),
+        "meow":     lambda: mix(tone(620, 0.34, "square", 0.25, 0.16, slide=980, vibrato=7),
+                                tone(1240, 0.34, "triangle", vol=0.06, slide=1700)),
         "giggle":   lambda: chain(*[mix(tone(f, 0.11, "square", 0.5, 0.12, slide=f * 0.8, vibrato=25),
                                         tone(f * 2.01, 0.11, "triangle", vol=0.05)) if f else rest(0.05)
                                     for f in (1180, 0, 1060, 0, 960, 0, 1250, 0, 820)]),
@@ -207,6 +209,20 @@ def _effects():
 # Each tune: beats per minute, steps per beat, and parts written as "note:steps" tokens
 # ("R" is a rest). Every tune here was written for BMO's games.
 TUNES = {
+    # The Big Move: a bouncy moving-day tune in C
+    "big_move": (132, 2, {
+        "lead": "C5:1 E5:1 G5:1 E5:1 C6:2 G5:2 A5:1 G5:1 F5:1 E5:1 D5:2 G4:2 "
+                "C5:1 E5:1 G5:1 E5:1 C6:2 E6:2 D6:1 C6:1 B5:1 D6:1 C6:4",
+        "bass": "C3:2 G2:2 C3:2 G2:2 F2:2 C3:2 G2:2 G2:2 C3:2 G2:2 C3:2 E2:2 G2:2 G2:2 C3:2 C3:2",
+        "drum": "K:1 H:1 S:1 H:1 " * 8,
+    }),
+    # Air Hockey: a cool game-room groove in A minor
+    "air_hockey": (150, 2, {
+        "lead": "A4:1 C5:1 E5:1 A5:1 G5:2 E5:2 D5:1 E5:1 G5:1 E5:1 D5:2 C5:2 "
+                "A4:1 C5:1 E5:1 A5:1 C6:2 B5:2 A5:1 G5:1 E5:1 G5:1 A5:4",
+        "bass": "A2:2 A2:2 C3:2 C3:2 D3:2 D3:2 E3:2 E2:2 A2:2 A2:2 F2:2 F2:2 G2:2 G2:2 A2:2 A2:2",
+        "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 H:1 " * 4,
+    }),
     "menu": (112, 2, {
         "lead": "E5:2 G5:2 C6:2 G5:2 A5:2 G5:2 E5:4 F5:2 A5:2 D6:2 A5:2 G5:6 R:2 "
                 "E5:2 G5:2 C6:2 E6:2 D6:2 C6:2 A5:4 G5:2 E5:2 D5:2 F5:2 C5:6 R:2",

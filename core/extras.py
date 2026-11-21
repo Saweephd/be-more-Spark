@@ -6,7 +6,8 @@ import re
 
 GAME_TITLES = {"mazee_run": "Mazee Run", "bmo_catch": "BMO Catch", "angry_poppa": "Angry Poppa",
                "uncle_t": "Uncle T's Big Adventure", "scary_babies": "Scary Babies",
-               "soldiers_vs_spies": "Soldiers vs Spies", "black_warrior": "Black Warrior"}
+               "soldiers_vs_spies": "Soldiers vs Spies", "black_warrior": "Black Warrior",
+               "big_move": "The Big Move", "air_hockey": "Air Hockey"}
 
 # Speech to text rarely spells the names right, so each game lists the ways it is heard.
 _GAME_WORDS = {
@@ -16,6 +17,8 @@ _GAME_WORDS = {
     "soldiers_vs_spies": r"soldiers? ?(vs|versus|v|and|against|verses)? ?(the )?spies|soldiers? game|spy game|army game|the war game",
     "scary_babies": r"(scary|scarey|scared|scarry) ?bab(y|ies|e?s)|the baby game|bab(y|ies) game|big baby",
     "black_warrior": r"black ?(warrior|worrier|warriors|water)|the (fighting|karate|kung fu|street fighting) game|quick'?s game",
+    "big_move": r"(the )?big move|moving (day )?game|the moving game|whitney'?s game|lucas'?s? game",
+    "air_hockey": r"air ?hockey|hockey|(momma|mama|mom|mother) rose'?s? game|rose'?s game",
     "uncle_t": r"uncle ?(t|tee|tea|tease|ts|t's)\b|big adventure|the (driving|car|racing|chase|cop) game|driving game",
 }
 _PLAY = r"\b(play|start|launch|open|run|load|i want to play|let'?s play|can we play)\b"

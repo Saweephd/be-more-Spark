@@ -9,4 +9,6 @@ GAMES = {
     "scary_babies": "Scary Babies",
     "soldiers_vs_spies": "Soldiers vs Spies",
     "black_warrior": "Black Warrior",
+    "big_move": "The Big Move",
+    "air_hockey": "Air Hockey",
 }

@@ -55,14 +55,14 @@ class Menu:
         surf.fill((18, 60, 66))
         for i in range(0, W, 20):
             pygame.draw.line(surf, (22, 70, 76), (i, 0), (i, H))
-        text(surf, "GAMES", (W // 2, 12), 40, c.YELLOW, center=True)
+        text(surf, "GAMES", (W // 2, 6), 30, c.YELLOW, center=True)
         scores = c.load_scores(self.scores_path)
         for i, (name, title) in enumerate(self.games):
-            y = 42 + i * 23
+            y = 34 + i * 19
             sel = i == self.index
-            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 21), border_radius=4)
-            text(surf, title, (64, y + 3), 20, c.INK if sel else c.WHITE, shadow=not sel)
-            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 5), 16, c.INK if sel else (170, 210, 210), shadow=False)
+            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 17), border_radius=4)
+            text(surf, title, (64, y + 2), 18, c.INK if sel else c.WHITE, shadow=not sel)
+            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 3), 14, c.INK if sel else (170, 210, 210), shadow=False)
         if self.message:
             text(surf, self.message, (W // 2, 206), 16, c.WHITE, center=True)
         text(surf, "D-pad: choose   Big button: play   Triangle: back", (W // 2, 220), 16, c.WHITE, center=True)
