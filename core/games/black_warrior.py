@@ -1,11 +1,11 @@
-"""Black Warrior, Level 1: Tower Row. A Double Dragon style beat 'em up.
+"""Black Warrior: a Double Dragon style beat 'em up in six levels.
 
-Quick walks Tower Row with his face showing; when a fight starts he pulls on
-his cat mask. He fights up the street, through the Trillion Tower lobby and up
-the glass elevator to the penthouse, where the Trillion Heir waits. When the
-Heir is beaten, Quick opens a rift into the Ninth Dominion, draws the katana
-Daybreak and cuts the chain on the family vault. The city wins fair taxation
-and Tower Row changes.
+Quick walks the city with his face showing; when a fight starts he pulls on his
+cat mask. Each level takes on one wrong in the city: Tower Row (the Trillion
+Heir), Mercy General (the Capitalist Pig), the Gig Docks (Mister Poverty), the
+Old Ward (Madame Eviction), Smokestack Bend (Baron Smog) and City Hall (the Big
+Lie). Each has a set piece, a tag team guest, a boss and a katana finish from
+the Ninth Dominion, and each win changes the city.
 
     D-pad              walk anywhere on the street; tap left or right twice to dodge
     Triangle (B)       punch combo; pick up a weapon, swing it
@@ -13,7 +13,7 @@ and Tower Row changes.
     A and B together   jump (then A flying kick, B diving elbow); hold for a special
     B behind you       back elbow (hold away from the enemy)
     Walk into a dazed enemy to grab: B knees, A throws
-    Hold B one second while Mazee is here: her team attack
+    Hold B one second while a guest is here: their team attack
     Small circle       pause; skips a cutscene you have already seen
 
 Enemies are knocked out with stars over their heads, never hurt for real.
@@ -24,14 +24,20 @@ import math
 import pygame
 
 from . import bw_art as art
+from . import bw_bosses as bosses
+from . import bw_cast as cast
+from . import bw_guests as guests
+from . import bw_stages as stages
 from . import common as c
+from .bw_levels import ENEMY, GUEST_ORDER, GUESTS, LEVELS
 from .common import H, W, Game
 
 GRAV = 620.0
 JUMP_V = 236.0
 TOP, BOTTOM = art.FLOOR_TOP + 6, art.FLOOR_BOTTOM - 2
 MAX_HP = 100
-SEEN_KEY = "black_warrior_seen_l1"
+UNLOCK_KEY = "black_warrior_level"
+SEEN_KEY = "black_warrior_seen_l%d"
 
 # name: (duration, active from, active to, reach, damage, knocks down, sound, pose)
 MOVES = {
@@ -47,30 +53,8 @@ MOVES = {
 }
 B_COMBO = ("jab", "cross", "upper")
 A_COMBO = ("kick", "round", "spin")
-ENEMY = {   # hp, speed, reach, damage, cooldown, points
-    "valet": (30, 46, 22, 6, 1.3, 300),
-    "security": (42, 40, 24, 8, 1.5, 500),
-    "butler": (34, 54, 20, 5, 1.6, 400),
-}
-SCENES = [
-    {"name": "street", "length": art.STREET_LEN,
-     "zones": [{"at": 240, "waves": [["valet", "valet"], ["valet", "security", "valet"]]},
-               {"at": 820, "waves": [["security", "valet"], ["valet", "security", "security"]]}],
-     "weapons": [(470, 200, "bat"), (1000, 180, "pipe")], "token": (650, 196)},
-    {"name": "lobby", "length": art.LOBBY_LEN,
-     "zones": [{"at": 200, "waves": [["butler", "security"], ["butler", "valet", "butler"], ["security", "butler"]]}],
-     "weapons": [(330, 196, "pipe")], "token": None},
-]
-ELEVATOR_STOPS = {15: ["valet", "butler"], 30: ["security", "valet", "butler"], 45: ["security", "security", "butler"]}
-INTRO = [("QUICK", False, "Tower Row. The Trillion Heir's private kingdom."),
-         ("QUICK", False, "Rent's up, the bus is cut, the school roof leaks..."),
-         ("QUICK", False, "...and he pays less tax than the diner."),
-         ("QUICK", False, "Time somebody sent him a bill.")]
-BOSS_TALK = [("THE TRILLION HEIR", None, "Who let you in? This floor is for people born here."),
-             ("QUICK", True, "Nice chair. Did you earn it, or did Grandpa leave it to you?"),
-             ("THE TRILLION HEIR", None, "Butlers! Show this person the stairs!"),
-             ("QUICK", True, "Your free ride ends tonight.")]
-CUT_PHASES = ("katana", "reform")
+CUT_PHASES = ("katana", "reform", "ending")
+PLAY_PHASES = ("walk", "fight", "ride", "boss", "mask_off")
 
 
 class Fighter:
@@ -91,12 +75,18 @@ class Enemy(Fighter):
         Enemy._ids += 1
         self.id = Enemy._ids
         self.kind = kind
-        hp, self.speed, self.reach, self.dmg, self.cool_max, self.points = ENEMY[kind]
+        hp, self.speed, self.reach, self.dmg, self.cool_max, self.points, self.style = ENEMY[kind]
         self.hp = self.max_hp = hp
         self.cool = 0.8
-        self.recent = []          # times of recent hits, for dazing
+        self.recent = []
         self.thrown = False
         self.attacking = False
+        self.swung = False
+        self.riding = False
+        if self.style == "flyer":
+            self.z = 22.0
+        elif self.style == "puff":
+            self.z = 6.0
 
     @property
     def alive(self):
@@ -131,71 +121,96 @@ class BlackWarrior(Game):
 
     @property
     def music(self):
-        if getattr(self, "phase", "") in ("boss", "boss_intro"):
+        ph = getattr(self, "phase", "")
+        if ph in ("boss", "boss_intro"):
             return "bw_boss"
-        if getattr(self, "phase", "") in ("reform", "complete"):
+        if ph in ("reform", "complete", "ending"):
             return "bw_reform"
         return "black_warrior"
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.seen = bool(c.load_scores(self.scores_path).get(SEEN_KEY, 0))
+        self.unlocked = max(1, min(len(LEVELS), int(c.load_scores(self.scores_path).get(UNLOCK_KEY, 1))))
         self.reset()
 
     # ------------------------------------------------------------ setup
     def reset(self):
         self.score = 0
         self.win = False
-        self.scene_i = 0
         self.p = Quick(60, 196)
-        self.enemies, self.projs, self.fx, self.weapons = [], [], [], []
-        self.bubbles = []
+        self.enemies, self.projs, self.fx, self.weapons, self.bubbles = [], [], [], [], []
         self.boss = None
-        self.mazee = None
+        self.guest = None
         self.token = None
-        self.load_scene(0)
-        self.phase, self.pt = "intro", 0.0
-        self.talk, self.talk_i = INTRO, 0
-        self.go_t = 0.0
+        self.crate = None
         self.chord = None
         self.pending = None
         self.b_hold = 0.0
         self.last_tap = {"left": -9.0, "right": -9.0}
-        self.floor = 0.0
-        self.stop_i = 0
-        self.doors = 0.0
         self.fade = 0.0
-        self.cont_t = 0.0
+        self.go_t = 0.0
+        self.scramble = 0.0
+        self.debris = []
         self.resume_phase = "walk"
+        self.choice = self.unlocked
+        self.cam = 0.0
+        self.prog = 0.0
+        self.talk, self.talk_i = [], 0
+        self.start_level(0)
+        if self.unlocked > 1:
+            self.phase, self.pt = "select", 0.0
+
+    def start_level(self, i):
+        self.level_i = i
+        self.L = LEVELS[i]
+        self.seen = bool(c.load_scores(self.scores_path).get(SEEN_KEY % self.L["n"], 0))
+        self.p.hp = MAX_HP
+        self.p.masked = False
+        self.boss = None
+        self.guest = None
+        self.load_scene(0)
+        self.talk, self.talk_i = self.L["intro"], 0
+        self.set_phase("intro")
 
     def load_scene(self, i):
         self.scene_i = i
-        self.enemies, self.projs, self.weapons = [], [], []
-        self.cam = 0.0
-        if i < len(SCENES):
-            sc = SCENES[i]
-            self.length = sc["length"]
-            self.zones = [dict(z, done=False, wave=0) for z in sc["zones"]]
-            self.weapons = [{"x": float(x), "y": float(y), "kind": k} for x, y, k in sc["weapons"]]
-            tk = sc["token"]
-            self.token = {"x": float(tk[0]), "y": float(tk[1]), "t": 0.0} if tk else None
-        else:
-            self.length = W
-            self.zones = []
-            self.token = None
+        self.sc = self.L["scenes"][i]
+        self.enemies, self.projs, self.weapons, self.bubbles = [], [], [], []
+        self.cam, self.prog, self.doors = 0.0, 0.0, 0.0
+        self.stop_i, self.stop_spawned, self.belt = 0, False, 1
+        self.debris = []
         self.zone = None
-        self.bubbles = []
+        self.token = None
+        self.crate = None
+        self.zones = []
+        self.length = W
+        if self.sc["kind"] == "walk":
+            self.length = self.sc["length"]
+            self.zones = [dict(z, done=False, wave=0) for z in self.sc["zones"]]
+            self.weapons = [{"x": float(x), "y": float(y), "kind": k} for x, y, k in self.sc.get("weapons", [])]
+            tk = self.sc.get("token")
+            if tk and self.L["guest"]:
+                self.token = {"x": float(tk[0]), "y": float(tk[1]), "t": 0.0, "guest": self.L["guest"]}
+            cr = self.sc.get("crate")
+            if cr and self.met_guests():
+                self.crate = {"x": float(cr[0]), "y": float(cr[1]), "hp": 3}
         self.p.x, self.p.y, self.p.z = 40.0, 196.0, 0.0
-        if self.mazee is not None:
-            self.mazee = None
+        self.p.state, self.p.held = "idle", None
+
+    def met_guests(self):
+        return GUEST_ORDER[:min(self.level_i, len(GUEST_ORDER))]
 
     @property
     def scene(self):
-        return ["street", "lobby", "elevator", "penthouse"][self.scene_i]
+        return self.sc["stage"]
+
+    @property
+    def fixed(self):
+        return self.sc["kind"] != "walk"
 
     # ------------------------------------------------------------ frame
     def step(self, dt, inp):
-        if self.state == "play" and self.phase in CUT_PHASES and "start" in inp.pressed and self.seen:
+        if self.state == "play" and getattr(self, "phase", "") in CUT_PHASES and "start" in inp.pressed and self.seen:
             inp.pressed.discard("start")
             self.skip_cutscene()
         super().step(dt, inp)
@@ -204,6 +219,7 @@ class BlackWarrior(Game):
         self.pt += dt
         self.fade = max(0.0, self.fade - dt)
         self.go_t = max(0.0, self.go_t - dt)
+        self.scramble = max(0.0, self.scramble - dt)
         for f in self.fx:
             f[3] -= dt
         self.fx = [f for f in self.fx if f[3] > 0]
@@ -212,7 +228,23 @@ class BlackWarrior(Game):
         self.bubbles = [b for b in self.bubbles if b[2] > 0]
         getattr(self, "phase_" + self.phase)(dt, inp)
 
-    # ------------------------------------------------------------ story phases
+    def set_phase(self, ph):
+        self.phase, self.pt = ph, 0.0
+        if ph in ("boss", "reform", "ending", "intro"):
+            self.sound.music(self.music)
+
+    # ------------------------------------------------------------ select and story
+    def phase_select(self, dt, inp):
+        if "up" in inp.pressed and self.choice > 1:
+            self.choice -= 1
+            self.sfx("move")
+        if "down" in inp.pressed and self.choice < self.unlocked:
+            self.choice += 1
+            self.sfx("move")
+        if self.pt > 0.3 and ("a" in inp.pressed or "b" in inp.pressed):
+            self.sfx("select")
+            self.start_level(self.choice - 1)
+
     def phase_intro(self, dt, inp):
         self.talk_step(inp, lambda: self.set_phase("walk"))
 
@@ -220,18 +252,13 @@ class BlackWarrior(Game):
         if self.pt > 0.3 and ("a" in inp.pressed or "b" in inp.pressed):
             line = self.talk[self.talk_i][2]
             if self.pt * 45 < len(line):
-                self.pt = 99.0             # first press finishes the line
+                self.pt = 99.0
             else:
                 self.talk_i += 1
                 self.pt = 0.0
                 self.sfx("move")
                 if self.talk_i >= len(self.talk):
                     done()
-
-    def set_phase(self, ph):
-        self.phase, self.pt = ph, 0.0
-        if ph in ("boss", "reform"):
-            self.sound.music(self.music)
 
     def phase_mask_on(self, dt, inp):
         if self.pt < dt * 1.5:
@@ -253,12 +280,12 @@ class BlackWarrior(Game):
         self.p.state, self.p.move = "idle", None
         self.set_phase("mask_on")
 
-    # ------------------------------------------------------------ street and lobby
+    # ------------------------------------------------------------ walking scenes
     def phase_walk(self, dt, inp):
         self.update_world(dt, inp, control=True)
-        p = self.p
-        if self.scene_i >= len(SCENES):
+        if self.phase != "walk":
             return
+        p = self.p
         nxt = next((z for z in self.zones if not z["done"]), None)
         if nxt is not None and self.cam >= nxt["at"] - 1:
             self.zone = nxt
@@ -287,135 +314,126 @@ class BlackWarrior(Game):
                 self.set_phase("mask_off")
                 self.sfx("clear")
 
+    def spawn(self, kind, x, y):
+        e = Enemy(kind, x, y)
+        self.enemies.append(e)
+        return e
+
     def spawn_wave(self):
         z = self.zone
-        kinds = z["waves"][z["wave"]]
-        for i, k in enumerate(kinds):
+        for i, k in enumerate(z["waves"][z["wave"]]):
             side = 1 if i % 2 == 0 else -1
             x = self.cam + (W + 20 + i * 18 if side > 0 else -20 - i * 18)
-            y = TOP + 10 + (i * 23) % (BOTTOM - TOP - 10)
-            self.enemies.append(Enemy(k, x, y))
+            self.spawn(k, x, TOP + 10 + (i * 23) % (BOTTOM - TOP - 10))
 
     def next_scene(self):
-        self.mazee_leave(silent=True)
-        if self.scene_i == 0:
-            self.load_scene(1)
-            self.set_phase("walk")
-        else:
-            self.load_scene(2)
-            self.floor, self.stop_i, self.doors = 0.0, 0, 0.0
-            self.stop_spawned = False
-            self.p.x, self.p.y = W / 2, 200.0
-            self.put_mask_on("elevator")
+        if self.guest is not None:
+            self.guest.leave(self, silent=True)
+            self.guest = None
+        self.load_scene(self.scene_i + 1)
         self.fade = 0.6
+        kind = self.sc["kind"]
+        if kind == "walk":
+            self.set_phase("walk")
+        elif kind == "ride":
+            self.p.x, self.p.y = W / 2, 200.0
+            self.put_mask_on("ride")
+        else:
+            self.p.x, self.p.y = 90.0, 200.0
+            self.boss = bosses.make(self.L["boss"])
+            self.talk, self.talk_i = self.L["boss_talk"], 0
+            self.p.masked = True
+            self.set_phase("boss_intro")
 
-    # ------------------------------------------------------------ elevator set piece
-    def phase_elevator(self, dt, inp):
+    # ------------------------------------------------------------ set pieces
+    def phase_ride(self, dt, inp):
         self.update_world(dt, inp, control=True)
-        if self.phase != "elevator":
+        if self.phase != "ride":
             return
-        stops = sorted(ELEVATOR_STOPS)
-        target = stops[self.stop_i] if self.stop_i < len(stops) else 60
-        busy = any(e.alive for e in self.enemies)
-        if self.floor < target:
+        self.ride_hazards(dt)
+        b = self.boss
+        if b is not None:
+            if b.hp > 0:
+                b.update(self, dt)
+            else:
+                self.fx.append(["ko", b.x, b.y, 0.9, False])
+                self.score += 2000
+                self.sfx("boom")
+                self.boss = None
+        stops = self.sc["stops"]
+        end = self.sc["end"]
+        target = stops[self.stop_i][0] if self.stop_i < len(stops) else end
+        busy = any(e.alive for e in self.enemies) or self.boss is not None
+        if self.prog < target:
             self.doors = max(0.0, self.doors - dt * 3)
             if self.doors <= 0 and not busy:
-                self.floor = min(float(target), self.floor + dt * 6)
-                if self.floor >= target:
+                self.prog = min(float(target), self.prog + dt * 6)
+                if self.prog >= target:
                     self.sfx("ding")
-                    if target == 60:
-                        self.to_penthouse()
+                    if target == end:
+                        self.next_scene()
                         return
         elif self.stop_i < len(stops):
             self.doors = min(1.0, self.doors + dt * 3)
-            if self.doors >= 1.0 and not busy and not getattr(self, "stop_spawned", False):
-                for i, k in enumerate(ELEVATOR_STOPS[target]):
-                    x = 15 if i % 2 == 0 else W - 15
-                    self.enemies.append(Enemy(k, x, TOP + 12 + i * 20))
+            if self.doors >= 1.0 and not busy and not self.stop_spawned:
+                for i, k in enumerate(stops[self.stop_i][1]):
+                    if k.startswith("boss:"):
+                        self.boss = bosses.make(k.split(":")[1], mini=True)
+                        self.boss.x = W - 80
+                        self.bubble("Rematch!", self.boss.x, 80, 1.2)
+                    else:
+                        x = 15 if i % 2 == 0 else W - 15
+                        if self.scene == "ramp":
+                            x = W + 30 + i * 40
+                        e = self.spawn(k, x, TOP + 12 + i * 20)
+                        e.riding = self.scene == "ramp"
                 self.stop_spawned = True
             elif self.doors >= 1.0 and not busy and self.stop_spawned:
                 self.stop_i += 1
                 self.stop_spawned = False
+                self.belt = -self.belt
 
-    def to_penthouse(self):
-        self.load_scene(3)
-        self.p.x, self.p.y = 90.0, 200.0
-        self.fade = 0.6
-        self.boss = {"x": 300.0, "y": 190.0, "z": 34.0, "hp": 260, "max": 260, "state": "float", "st": 0.0,
-                     "flash": 0.0, "summons": 0, "vx": 0.0, "cycle": 0, "hat": False}
-        self.talk, self.talk_i = BOSS_TALK, 0
-        self.set_phase("boss_intro")
+    def ride_hazards(self, dt):
+        p = self.p
+        if self.scene == "conveyor":
+            push = self.belt * 30 * dt
+            if p.z <= 0 and p.state != "dodge":
+                p.x += push
+            for e in self.enemies:
+                if e.alive and e.z <= 0:
+                    e.x = max(self.lo() + 4, min(self.hi() - 4, e.x + push))
+        elif self.scene == "scaffold":
+            if self.rng.random() < dt * 0.7:
+                self.debris.append([p.x + self.rng.uniform(-40, 40), p.y + self.rng.uniform(-10, 10), 0.0])
+            for d in self.debris:
+                d[2] += dt
+                if 0.9 <= d[2] and d[2] - dt < 0.9:
+                    self.sfx("thud")
+                    if abs(d[0] - p.x) < 16 and abs(d[1] - p.y) < 9 and p.z < 20:
+                        self.hurt_player(10, d[0])
+                    for e in self.enemies:
+                        if e.alive and abs(d[0] - e.x) < 16 and abs(d[1] - e.y) < 9:
+                            self.damage_enemy(e, 12, True, 1, gain=False)
+            self.debris = [d for d in self.debris if d[2] < 1.3]
 
     # ------------------------------------------------------------ boss
     def phase_boss_intro(self, dt, inp):
-        self.boss["st"] += dt
         self.talk_step(inp, lambda: self.set_phase("boss"))
 
     def phase_boss(self, dt, inp):
         self.update_world(dt, inp, control=True)
-        if self.phase == "boss":
-            self.update_boss(dt)
-
-    def update_boss(self, dt):
-        b, p = self.boss, self.p
-        b["st"] += dt
-        b["flash"] = max(0.0, b["flash"] - dt)
-        if b["hp"] <= 0:
-            self.begin_katana()
+        if self.phase != "boss":
             return
-        for frac in (0.66, 0.33):
-            if b["hp"] < b["max"] * frac and b["summons"] < (1 if frac == 0.66 else 2):
-                b["summons"] += 1
-                for side in (-1, 1):
-                    self.enemies.append(Enemy("butler", W / 2 + side * (W / 2 + 15), TOP + 20 + side * 15 + 20))
-                self.bubble("Butlers!", b["x"], b["y"] - b["z"] - 70, 1.4)
-        s = b["state"]
-        if s == "float":
-            b["z"] += (34 - b["z"]) * min(1.0, dt * 3)
-            want_x = p.x + (90 if b["x"] >= p.x else -90)
-            want_x = max(50, min(W - 50, want_x))
-            b["x"] += max(-60 * dt, min(60 * dt, want_x - b["x"]))
-            b["y"] += max(-40 * dt, min(40 * dt, p.y - b["y"]))
-            if b["st"] > 2.2:
-                b["state"], b["st"] = ("coins", 0.0) if b["cycle"] % 2 == 0 else ("ram", 0.0)
-                b["cycle"] += 1
-        elif s == "coins":
-            if b["st"] > 0.5 and not b.get("thrown"):
-                b["thrown"] = True
-                d = 1 if p.x > b["x"] else -1
-                for k in range(5):
-                    self.projs.append({"kind": "coin", "x": b["x"] + d * 20, "y": p.y + (k - 2) * 9, "z": b["z"] + 30,
-                                       "vx": d * (110 + k * 12), "vz": 60.0, "g": 260.0, "dmg": 6, "owner": "enemy"})
-                self.sfx("coin")
-            if b["st"] > 1.0:
-                b["thrown"] = False
-                b["state"], b["st"] = "tired", 0.0
-        elif s == "tired":                 # the throne sinks low: now he can be hit from the ground
-            b["z"] += (6 - b["z"]) * min(1.0, dt * 5)
-            if b["st"] > 2.4:
-                b["state"], b["st"] = "float", 0.0
-        elif s == "ram":
-            if b["st"] < 0.6:
-                b["z"] += (44 - b["z"]) * min(1.0, dt * 4)
-                b["vx"] = 230.0 if p.x > b["x"] else -230.0
-                b["y"] += max(-50 * dt, min(50 * dt, p.y - b["y"]))
-            else:
-                b["z"] += (10 - b["z"]) * min(1.0, dt * 8)
-                b["x"] += b["vx"] * dt
-                if abs(b["x"] - p.x) < 26 and abs(b["y"] - p.y) < 12 and p.z < 30:
-                    self.hurt_player(14, b["x"], knock=True)
-                if b["x"] < 30 or b["x"] > W - 30 or b["st"] > 2.4:
-                    b["x"] = max(30.0, min(W - 30.0, b["x"]))
-                    b["state"], b["st"] = "tired", 0.0
+        self.boss.update(self, dt)
+        if self.boss.hp <= 0:
+            self.begin_katana()
 
     def boss_hit(self, dmg, from_air, sx, sy):
         b = self.boss
-        if b is None or b["hp"] <= 0:
+        if b is None or b.hp <= 0:
             return False
-        if b["z"] > 14 and not from_air:
+        if not b.take(dmg, from_air):
             return False
-        b["hp"] = max(0, b["hp"] - dmg)
-        b["flash"] = 0.08
         self.score += dmg * 10
         if self.p.state not in ("special", "flurry"):
             self.p.meter = min(3.0, self.p.meter + 0.05)
@@ -425,33 +443,38 @@ class BlackWarrior(Game):
     # ------------------------------------------------------------ katana and reform
     def begin_katana(self):
         self.enemies, self.projs = [], []
+        self.guest = None
         p, b = self.p, self.boss
         p.state, p.move, p.z, p.weapon = "cut", None, 0.0, None
         p.x, p.y, p.face = 150.0, 204.0, 1
-        b["x"], b["y"], b["state"] = 300.0, 196.0, "beaten"
+        b.x, b.y, b.state, b.st = 300.0, 196.0, "beaten", 0.0
+        if hasattr(b, "ball"):
+            b.ball = None
+        if hasattr(b, "wave"):
+            b.wave = None
         self.set_phase("katana")
         self.sound.stop_music()
         self.sfx("rift")
 
     def phase_katana(self, dt, inp):
         t, b, p = self.pt, self.boss, self.p
-        b["st"] += dt
+        k = self.L["katana"]
         if 2.6 <= t < 3.0:
-            p.x = min(318.0, p.x + dt * 480)
+            p.x = min(300.0, p.x + dt * 420)
         if 3.0 <= t and t - dt < 3.0:
             self.sfx("slash")
         if 3.4 <= t and t - dt < 3.4:
             self.sfx("boom")
         if t > 3.4:
-            b["z"] = max(0.0, b["z"] - dt * 30)
-        if t > 4.6 and not b["hat"]:
-            b["hat"] = True
-            self.bubble("My... first job?", b["x"], 70, 1.8)
+            b.z = max(0.0, b.z - dt * 30)
+        if t > 4.6 and not b.gag:
+            b.gag = True
+            self.bubble(k["boss_line"], b.x, 70, 1.8)
         if 6.0 <= t and t - dt < 6.0:
             self.sfx("rift")
         if 6.8 <= t and t - dt < 6.8:
             self.sfx("mask")
-            self.bubble("Welcome to the working world.", p.x, 120, 2.2)
+            self.bubble(k["quick_line"], p.x, 120, 2.2)
         p.masked = t < 6.9
         if t > 9.2:
             self.finish_katana()
@@ -459,17 +482,19 @@ class BlackWarrior(Game):
     def finish_katana(self):
         if not self.seen:
             self.seen = True
-            c.save_score(SEEN_KEY, 1, self.scores_path)
+            c.save_score(SEEN_KEY % self.L["n"], 1, self.scores_path)
         self.score += 10000
         self.set_phase("reform")
 
     def skip_cutscene(self):
         if self.phase == "katana":
-            self.boss["hat"] = True
+            self.boss.gag = True
             self.p.masked = False
             self.finish_katana()
         elif self.phase == "reform":
             self.complete()
+        elif self.phase == "ending":
+            self.finish_game()
 
     def phase_reform(self, dt, inp):
         if self.pt > 3.5 and self.pt - dt <= 3.5:
@@ -478,13 +503,27 @@ class BlackWarrior(Game):
             self.complete()
 
     def complete(self):
+        nxt = self.level_i + 2
+        if nxt <= len(LEVELS) and nxt > self.unlocked:
+            self.unlocked = nxt
+            c.save_score(UNLOCK_KEY, nxt, self.scores_path)
+        if self.level_i == len(LEVELS) - 1:
+            self.set_phase("ending")
+            return
         self.set_phase("complete")
         self.sfx("win")
 
     def phase_complete(self, dt, inp):
         if self.pt > 3.0 or (self.pt > 1.0 and "a" in inp.pressed):
-            self.win = True
-            self.game_over()
+            self.start_level(self.level_i + 1)
+
+    def phase_ending(self, dt, inp):
+        if self.pt > 22.0 or (self.pt > 3.0 and self.seen and "a" in inp.pressed):
+            self.finish_game()
+
+    def finish_game(self):
+        self.win = True
+        self.game_over()
 
     # ------------------------------------------------------------ continue
     def phase_continue(self, dt, inp):
@@ -492,40 +531,40 @@ class BlackWarrior(Game):
             p = self.p
             p.lives, p.hp, p.inv, p.state, p.st = 3, MAX_HP, 2.5, "idle", 0.0
             self.score = 0
-            self.enemies = [e for e in self.enemies if e.alive]
             for e in self.enemies:
-                e.hp = e.max_hp
+                if e.alive:
+                    e.hp = e.max_hp
             self.set_phase(self.resume_phase)
             self.sfx("start")
         elif self.pt > 9.9:
             self.game_over()
 
-    # ------------------------------------------------------------ the world: Quick, enemies, Mazee, things
+    # ------------------------------------------------------------ the world
     def update_world(self, dt, inp, control):
         p = self.p
         p.inv = max(0.0, p.inv - dt)
         p.combo_t += dt
         p.flash = max(0.0, p.flash - dt)
-        if control:
+        if control and p.state != "cut":
             self.read_input(dt, inp)
         self.update_hero(dt, inp)
         for e in self.enemies:
             self.update_enemy(e, dt)
         self.enemies = [e for e in self.enemies if e.alive or e.st < 0.9]
         self.update_projs(dt)
-        self.update_mazee(dt)
+        if self.guest is not None and not self.guest.update(self, dt):
+            self.guest = None
         self.check_pickups()
 
     def lo(self):
-        return self.cam + 10 if self.scene_i < 2 else 12.0
+        return 12.0 if self.fixed else self.cam + 10
 
     def hi(self):
-        return self.cam + W - 10 if self.scene_i < 2 else W - 12.0
+        return W - 12.0 if self.fixed else self.cam + W - 10
 
     def read_input(self, dt, inp):
         p = self.p
         held, pressed = inp.held, inp.pressed
-        # a quick tap of A or B waits two frames to see whether the other joins it (a jump)
         for btn in ("a", "b"):
             if btn in pressed:
                 other = "b" if btn == "a" else "a"
@@ -553,18 +592,19 @@ class BlackWarrior(Game):
                 btn = self.pending[0]
                 self.pending = None
                 self.press(btn, inp)
-        # team attack: hold B for a second while Mazee is here
-        if "b" in held and "a" not in held and self.mazee is not None and self.mazee["state"] == "fight":
+        g = self.guest
+        if "b" in held and "a" not in held and g is not None and g.state == "fight":
             self.b_hold += dt
             if self.b_hold >= 1.0:
                 self.b_hold = 0.0
-                self.team_attack()
+                g.team(self)
         else:
             self.b_hold = 0.0
         for d in ("left", "right"):
             if d in pressed:
                 if self.time - self.last_tap[d] < 0.25 and self.can_act():
-                    self.start_dodge(1 if d == "right" else -1)
+                    sgn = 1 if d == "right" else -1
+                    self.start_dodge(-sgn if self.scramble > 0 else sgn)
                 self.last_tap[d] = self.time
 
     def can_act(self):
@@ -616,6 +656,8 @@ class BlackWarrior(Game):
         p.state, p.st = "jump", 0.0
         p.vz = JUMP_V
         move = ("right" in inp.held) - ("left" in inp.held)
+        if self.scramble > 0:
+            move = -move
         p.vx = move * 80.0
         p.air = None
         p.hit_ids = set()
@@ -649,9 +691,8 @@ class BlackWarrior(Game):
         p = self.p
         for w in self.weapons:
             if abs(w["x"] - p.x) < 14 and abs(w["y"] - p.y) < 9:
-                in_reach = any(e.alive and e.state not in ("down", "fly") and abs(e.y - p.y) <= 9
-                               and 0 < (e.x - p.x) * p.face <= 26 for e in self.enemies)
-                if in_reach:
+                if any(e.alive and e.state not in ("down", "fly") and abs(e.y - p.y) <= 9
+                       and 0 < (e.x - p.x) * p.face <= 26 for e in self.enemies):
                     return False
                 self.weapons.remove(w)
                 p.weapon = {"kind": w["kind"], "uses": 8}
@@ -686,7 +727,9 @@ class BlackWarrior(Game):
     def update_hero(self, dt, inp):
         p = self.p
         p.st += dt
-        held = inp.held if self.phase in ("walk", "fight", "elevator", "boss", "mask_off") else set()
+        held = set(inp.held) if self.phase in PLAY_PHASES else set()
+        if self.scramble > 0:
+            held = {{"left": "right", "right": "left"}.get(k, k) for k in held}
         s = p.state
         if s in ("idle", "walk"):
             mx = ("right" in held) - ("left" in held)
@@ -750,10 +793,11 @@ class BlackWarrior(Game):
             for k, at in enumerate((0.3, 0.7, 1.1)):
                 if p.st >= at and p.st - dt < at:
                     for e in self.enemies:
-                        if e.alive and e.state not in ("down", "fly") and self.cam - 10 < e.x < self.cam + W + 10:
+                        if e.alive and e.state not in ("down", "fly") and self.lo() - 20 < e.x < self.hi() + 20:
                             self.damage_enemy(e, 12, knock=(k == 2), d=1 if e.x > p.x else -1)
                     if self.boss is not None:
-                        self.boss_hit(16, True, self.boss["x"], self.boss["y"] - self.boss["z"] - 40)
+                        bx, by = self.boss.body()
+                        self.boss_hit(16, True, bx, by)
                     self.sfx("punch")
             if p.st > 1.6:
                 p.state = "idle"
@@ -789,7 +833,7 @@ class BlackWarrior(Game):
     def try_grab(self):
         p = self.p
         for e in self.enemies:
-            if e.state == "dazed" and abs(e.y - p.y) < 8 and 0 < (e.x - p.x) * p.face < 26:
+            if e.state == "dazed" and e.style == "brawler" and abs(e.y - p.y) < 8 and 0 < (e.x - p.x) * p.face < 26:
                 p.state, p.st, p.held, p.knees = "grab", 0.0, e, 0
                 e.state, e.st = "held", 0.0
                 self.sfx("grab")
@@ -803,7 +847,7 @@ class BlackWarrior(Game):
                 continue
             if e.state == "down" and not downed:
                 continue
-            if e.state != "down" and downed is False and e.z > 26:
+            if e.state != "down" and e.z > 26:
                 continue
             dy = abs(e.y - p.y)
             dx = (e.x - p.x) * d
@@ -820,12 +864,24 @@ class BlackWarrior(Game):
                 self.damage_enemy(e, dmg, knock, 1 if e.x > p.x else -1)
                 hit_any = True
                 self.fx.append(["spark", e.x, e.y - 30 - e.z, 0.12, knock])
+        cr = self.crate
+        if cr is not None and -3 not in p.hit_ids and abs(cr["y"] - p.y) <= 10 and -10 < (cr["x"] - p.x) * d <= reach + 6:
+            p.hit_ids.add(-3)
+            cr["hp"] -= 1
+            self.sfx("bonk")
+            hit_any = True
+            if cr["hp"] <= 0:
+                self.crate = None
+                met = self.met_guests()
+                self.token = {"x": cr["x"], "y": cr["y"], "t": 0.0, "guest": met[self.rng.randrange(len(met))]}
+                self.fx.append(["spark", cr["x"], cr["y"] - 14, 0.3, True])
         b = self.boss
-        if b is not None and b["hp"] > 0 and -2 not in p.hit_ids and self.phase == "boss":
-            dy = abs(b["y"] - p.y)
-            dx = (b["x"] - p.x) * d
-            if dy <= 12 and (-10 < dx <= reach + 22 or radius and abs(b["x"] - p.x) < reach + 20):
-                if self.boss_hit(dmg, air or p.z > 10, b["x"] - d * 14, b["y"] - b["z"] - 40):
+        if b is not None and b.hp > 0 and -2 not in p.hit_ids and self.phase in ("boss", "ride"):
+            dy = abs(b.y - p.y)
+            dx = (b.x - p.x) * d
+            if dy <= 12 and (-10 < dx <= reach + 22 or radius and abs(b.x - p.x) < reach + 20):
+                bx, by = b.body()
+                if self.boss_hit(dmg, air or p.z > 10, bx - d * 14, by):
                     p.hit_ids.add(-2)
                     hit_any = True
         if hit_any:
@@ -846,6 +902,13 @@ class BlackWarrior(Game):
         e.recent = [t for t in e.recent if self.time - t < 1.2] + [self.time]
         e.attacking = False
         if e is self.p.held and not knock and e.hp > 0:
+            return
+        if e.style in ("flyer", "puff"):          # small fry: a solid hit knocks them out of the air
+            if e.hp <= 0 or knock or e.style == "puff":
+                e.state, e.st = "fly", 0.0
+                e.vx, e.vz = d * 70.0, 80.0
+            else:
+                e.state, e.st = "hurt", 0.0
             return
         if knock or e.hp <= 0:
             e.state, e.st = "fly", 0.0
@@ -893,7 +956,7 @@ class BlackWarrior(Game):
             e.z += e.vz * dt
             e.vz -= GRAV * dt
             e.x += e.vx * dt
-            if e.thrown:                      # a thrown enemy bowls over the others
+            if e.thrown:
                 for o in self.enemies:
                     if o is not e and o.alive and o.state not in ("fly", "down") and abs(o.y - e.y) < 11 and abs(o.x - e.x) < 14:
                         self.damage_enemy(o, 14, True, 1 if e.vx > 0 else -1)
@@ -901,7 +964,7 @@ class BlackWarrior(Game):
             if e.z <= 0:
                 e.z = 0.0
                 e.thrown = False
-                if e.hp <= 0:
+                if e.hp <= 0 or e.style in ("flyer", "puff"):
                     e.state, e.st = "out", 0.0
                     self.score += e.points
                     self.fx.append(["ko", e.x, e.y, 0.9, False])
@@ -919,7 +982,7 @@ class BlackWarrior(Game):
                 e.state, e.st = "idle", 0.0
                 e.cool = 0.6
             return
-        if s in ("hurt",):
+        if s == "hurt":
             if e.st > 0.3:
                 e.state, e.st = "idle", 0.0
             return
@@ -932,18 +995,38 @@ class BlackWarrior(Game):
                 e.state, e.st = "idle", 0.0
             return
         e.cool -= dt
-        if p.state in ("down", "fly", "cut") or self.phase not in ("fight", "elevator", "boss", "walk", "mask_off"):
+        if e.riding:                         # arriving on a runaway gurney
+            e.x -= 170 * dt
+            if e.x < W - 70:
+                e.riding = False
+                self.sfx("land")
+            return
+        if p.state in ("down", "fly", "cut") or self.phase not in PLAY_PHASES:
             e.state = "idle"
             return
+        if e.style == "flyer":
+            self.update_flyer(e, dt)
+            return
+        if e.style == "puff":
+            e.x += max(-e.speed * dt, min(e.speed * dt, p.x - e.x))
+            e.y += max(-e.speed * 0.7 * dt, min(e.speed * 0.7 * dt, p.y - e.y))
+            e.z = 6 + math.sin(e.st * 3) * 3
+            e.anim += dt
+            if abs(e.x - p.x) < 14 and abs(e.y - p.y) < 8 and e.cool <= 0:
+                e.cool = 1.0
+                self.hurt_player(e.dmg, e.x)
+            return
         if s == "attack":
-            if e.st >= 0.28 and not getattr(e, "swung", False):
+            if e.st >= 0.28 and not e.swung:
                 e.swung = True
-                if e.kind == "butler" and abs(e.x - p.x) > 40:
-                    self.projs.append({"kind": "tray", "x": e.x + e.face * 10, "y": e.y, "z": 24.0, "vx": e.face * 160.0,
+                if e.style == "thrower" and abs(e.x - p.x) > 40:
+                    kind = {"butler": "tray", "gigbot": "box", "smogbot": "soot", "bailiff": "notice"}.get(e.kind, "tray")
+                    self.projs.append({"kind": kind, "x": e.x + e.face * 10, "y": e.y, "z": 24.0, "vx": e.face * 160.0,
                                        "vz": 0.0, "g": 0.0, "dmg": e.dmg + 2, "owner": "enemy"})
                     self.sfx("throw")
                 elif abs(e.y - p.y) <= 8 and 0 < (p.x - e.x) * e.face <= e.reach + 4 and p.z < 20:
-                    self.hurt_player(e.dmg, e.x, knock=(e.kind == "security" and self.rng.random() < 0.25))
+                    heavy = e.kind in ("security", "foreman", "demo", "collector") and self.rng.random() < 0.25
+                    self.hurt_player(e.dmg, e.x, knock=heavy)
             if e.st >= 0.5:
                 e.state, e.st = "idle", 0.0
                 e.swung = False
@@ -953,21 +1036,19 @@ class BlackWarrior(Game):
         attackers = sum(1 for o in self.enemies if o.attacking and o is not e)
         side = 1 if e.x > p.x else -1
         e.face = -side
-        ranged = e.kind == "butler" and abs(e.x - p.x) > 50
+        ranged = e.style == "thrower" and abs(e.x - p.x) > 50
         if e.attacking or attackers < 2:
             e.attacking = True
             tx = p.x + side * (e.reach - 2)
-            if e.kind == "butler" and e.hp > 0 and (e.id % 2 == 0):
+            if e.style == "thrower" and e.id % 2 == 0:
                 tx = p.x + side * 90
         else:
             tx = p.x + side * 70
-        if not (self.lo() < tx < self.hi()):        # stay where Quick can reach: never stand off screen
+        if not (self.lo() < tx < self.hi()):
             tx = p.x - side * (e.reach - 2 if e.attacking else 70)
         tx = max(self.lo() + 8, min(self.hi() - 8, tx))
-        ty = p.y
-        dx, dy = tx - e.x, ty - e.y
-        moving = abs(dx) > 3 or abs(dy) > 2
-        if moving:
+        dx, dy = tx - e.x, p.y - e.y
+        if abs(dx) > 3 or abs(dy) > 2:
             e.x += max(-e.speed * dt, min(e.speed * dt, dx))
             e.y += max(-e.speed * 0.7 * dt, min(e.speed * 0.7 * dt, dy))
             e.anim += dt
@@ -980,6 +1061,24 @@ class BlackWarrior(Game):
             e.swung = False
         e.y = max(TOP, min(BOTTOM, e.y))
 
+    def update_flyer(self, e, dt):
+        """Drones hover at chest height and drop paper (or static) on Quick."""
+        p = self.p
+        e.anim += dt
+        tx = p.x + (40 if e.id % 2 else -40) * math.cos(e.st * 0.8)
+        tx = max(self.lo() + 8, min(self.hi() - 8, tx))
+        e.x += max(-e.speed * dt, min(e.speed * dt, tx - e.x))
+        e.y += max(-40 * dt, min(40 * dt, p.y - e.y))
+        e.z = 22 + math.sin(e.st * 4) * 3
+        e.face = 1 if p.x > e.x else -1
+        if e.cool <= 0 and abs(e.x - p.x) < 50 and abs(e.y - p.y) < 10:
+            e.cool = e.cool_max * self.rng.uniform(0.8, 1.2)
+            d = 1 if p.x > e.x else -1
+            self.projs.append({"kind": "slip" if e.kind == "authdrone" else "static", "x": e.x, "y": p.y, "z": e.z + 10,
+                               "vx": d * 90.0, "vz": 0.0, "g": 60.0, "dmg": e.dmg, "owner": "enemy",
+                               "scramble": e.kind == "fakenews"})
+            self.sfx("throw")
+
     def update_projs(self, dt):
         p = self.p
         for pr in self.projs:
@@ -989,134 +1088,53 @@ class BlackWarrior(Game):
             if "spin" in pr:
                 pr["spin"] += dt * 900
             if pr["owner"] == "enemy":
-                if abs(pr["x"] - p.x) < 9 and abs(pr["y"] - p.y) < 8 and abs(pr["z"] - (p.z + 22)) < 20:
+                if abs(pr["x"] - p.x) < 9 and abs(pr["y"] - p.y) < 8 and abs(pr["z"] - (p.z + 22)) < 22:
                     if p.inv <= 0 and p.state not in ("down", "fly", "dodge"):
                         self.hurt_player(pr["dmg"], pr["x"] - pr["vx"])
+                        if pr.get("scramble"):
+                            self.scramble = 2.0
+                            self.bubble("Fake news! Controls scrambled!", p.x, p.y - 64, 1.6)
                         pr["dead"] = True
             else:
                 for e in self.enemies:
                     if e.alive and e.state not in ("down", "fly") and abs(pr["x"] - e.x) < 11 and abs(pr["y"] - e.y) < 9:
-                        self.damage_enemy(e, pr["dmg"], True, 1 if pr["vx"] > 0 else -1)
+                        if pr["kind"] == "stun":
+                            e.hp -= pr["dmg"]
+                            if e.style in ("flyer", "puff") or e.hp <= 0:
+                                self.damage_enemy(e, 0, True, 1 if pr["vx"] > 0 else -1, gain=False)
+                            elif e.state != "held":
+                                e.state, e.st = "dazed", 0.3
+                        else:
+                            self.damage_enemy(e, pr["dmg"], True, 1 if pr["vx"] > 0 else -1)
                         self.sfx("bonk")
                         pr["dead"] = True
                         break
-                if not pr.get("dead") and self.boss is not None and self.boss["hp"] > 0:
-                    b = self.boss
-                    if abs(pr["x"] - b["x"]) < 26 and abs(pr["y"] - b["y"]) < 12:
-                        self.boss_hit(pr["dmg"], True, pr["x"], b["y"] - b["z"] - 40)
-                        pr["dead"] = True
+                b = self.boss
+                if not pr.get("dead") and b is not None and b.hp > 0 and self.phase in ("boss", "ride"):
+                    if abs(pr["x"] - b.x) < 26 and abs(pr["y"] - b.y) < 12:
+                        bx, by = b.body()
+                        if self.boss_hit(pr["dmg"], True, pr["x"], by):
+                            pr["dead"] = True
             if pr["z"] <= 0:
                 pr["dead"] = True
                 if pr["owner"] == "player":
                     self.weapons.append({"x": pr["x"], "y": pr["y"], "kind": pr["kind"]})
-        lo, hi = self.lo() - 40, self.hi() + 40
+        lo, hi = self.lo() - 60, self.hi() + 60
         self.projs = [pr for pr in self.projs if not pr.get("dead") and lo < pr["x"] < hi]
 
     def check_pickups(self):
         p, tk = self.p, self.token
-        if tk is not None and abs(tk["x"] - p.x) < 14 and abs(tk["y"] - p.y) < 10 and p.z < 20:
+        if tk is None:
+            return
+        tk["t"] += 1 / 60.0
+        if abs(tk["x"] - p.x) < 14 and abs(tk["y"] - p.y) < 10 and p.z < 20 and self.guest is None:
             self.token = None
-            self.summon_mazee()
-        if tk is not None:
-            tk["t"] += 1 / 60.0
+            self.summon(tk["guest"])
 
-    # ------------------------------------------------------------ Mazee
-    def summon_mazee(self):
-        p = self.p
-        self.mazee = {"x": self.cam - 30, "y": p.y + 8, "state": "enter", "t": 15.0, "st": 0.0, "face": 1,
-                      "target": None, "anim": 0.0, "fling": None}
-        self.sfx("bark")
+    def summon(self, kind):
+        self.guest = guests.summon(kind, self)
         self.sfx("powerup")
-        self.bubble("Hey Mazee!", p.x, p.y - 64, 1.6)
-        self.fx.append(["fence", self.cam + 8, p.y, 0.5, False])
-
-    def mazee_leave(self, silent=False):
-        m = self.mazee
-        if m is None or m["state"] == "leave":
-            return
-        m["state"], m["st"] = "leave", 0.0
-        if not silent:
-            self.bubble("Thanks for the assist, Mazee! Good girl!", self.p.x, self.p.y - 64, 2.4)
-            self.sfx("bark")
-        else:
-            self.mazee = None
-
-    def team_attack(self):
-        m = self.mazee
-        targets = [e for e in self.enemies if e.alive and e.state not in ("fly", "down")]
-        if not targets:
-            return
-        e = min(targets, key=lambda o: abs(o.x - m["x"]) + abs(o.y - m["y"]))
-        m["state"], m["st"], m["fling"] = "fetch", 0.0, e
-        e.state, e.st = "held", 0.0
-        self.bubble("Fetch, Mazee!", self.p.x, self.p.y - 64, 1.2)
-        self.sfx("bark")
-
-    def update_mazee(self, dt):
-        m = self.mazee
-        if m is None:
-            return
-        p = self.p
-        m["st"] += dt
-        m["anim"] += dt
-        if m["state"] == "leave":
-            m["x"] -= 220 * dt
-            m["face"] = -1
-            if m["x"] < self.cam - 60:
-                self.mazee = None
-            return
-        if m["state"] != "fetch":
-            m["t"] -= dt
-            if m["t"] <= 0:
-                self.mazee_leave()
-                return
-        if m["state"] == "enter":
-            m["x"] += 260 * dt
-            if m["x"] > p.x - 40:
-                m["state"] = "fight"
-            return
-        if m["state"] == "fetch":              # Fetch and Fling
-            e = m["fling"]
-            if not e.alive:
-                m["state"] = "fight"
-                return
-            tx = p.x + p.face * 22
-            e.x += (tx - e.x) * min(1.0, dt * 6)
-            e.y += (p.y - e.y) * min(1.0, dt * 6)
-            m["x"], m["y"], m["face"] = e.x - 14 * (1 if tx > e.x else -1), e.y + 2, 1 if tx > e.x else -1
-            if m["st"] > 0.6:
-                p.state, p.st, p.move = "atk", 0.0, "spin"
-                p.hit_ids = {e.id, -1}
-                self.launch(e, p.face, 260.0, 20)
-                self.fx.append(["spark", e.x, e.y - 30, 0.2, True])
-                self.sfx("kick")
-                self.score += 1000
-                m["state"] = "fight"
-                m["t"] = min(m["t"], 0.8)
-            return
-        targets = [e for e in self.enemies if e.alive and e.state not in ("fly", "down", "held")]
-        if not targets:
-            tx, ty = p.x - 36 * p.face, p.y + 6
-            m["x"] += max(-150 * dt, min(150 * dt, tx - m["x"]))
-            m["y"] += max(-80 * dt, min(80 * dt, ty - m["y"]))
-            m["face"] = p.face
-            return
-        e = min(targets, key=lambda o: abs(o.x - m["x"]) + abs(o.y - m["y"]))
-        dx, dy = e.x - m["x"], e.y - m["y"]
-        m["face"] = 1 if dx > 0 else -1
-        if abs(dx) > 16 or abs(dy) > 5:
-            m["x"] += max(-170 * dt, min(170 * dt, dx - m["face"] * 12))
-            m["y"] += max(-100 * dt, min(100 * dt, dy))
-        elif m["st"] > 0.5:
-            m["st"] = 0.0
-            e.state, e.st = "bitten", 0.0
-            e.hp -= 5
-            e.flash = 0.08
-            self.score += 50
-            self.p.meter = min(3.0, self.p.meter + 0.03)
-            self.sfx("bark" if self.rng.random() < 0.3 else "punch")
-            if e.hp <= 0:
-                self.damage_enemy(e, 0, True, m["face"])
+        self.bubble(GUESTS[kind]["greet"], self.p.x, self.p.y - 64, 1.6)
 
     def bubble(self, msg, x, y, t):
         self.bubbles.append([msg, (x, y), t])
@@ -1129,17 +1147,22 @@ class BlackWarrior(Game):
         pygame.draw.rect(surf, art.BLUE[2], (W - 126, H - 126, 120, 120), 2)
 
     def draw(self, surf):
-        sc = self.scene
+        if self.phase == "select":
+            self.draw_select(surf)
+            return
         if self.phase == "reform":
             self.draw_reform(surf)
             return
-        if sc in ("street", "lobby"):
-            (art.street if sc == "street" else art.lobby)(surf, self.cam, self.time)
-        elif sc == "elevator":
-            art.elevator(surf, self.floor, self.time, self.doors)
+        if self.phase == "ending":
+            self.draw_ending(surf)
+            return
+        kind = self.sc["kind"]
+        if kind == "walk":
+            stages.stage(surf, self.scene, self.cam, self.time)
+        elif kind == "ride":
+            stages.ride(surf, self.scene, self.prog, self.time, self.doors, self.belt)
         else:
-            vault = 1.0 if (self.phase in ("katana",) and self.pt > 3.0) else 0.0
-            art.penthouse(surf, self.time, vault)
+            stages.arena(surf, self.scene, self.time, clear=(self.phase == "katana" and self.pt > 3.0))
         if self.phase == "katana":
             self.draw_katana(surf)
         else:
@@ -1159,12 +1182,33 @@ class BlackWarrior(Game):
             art.say(surf, str(max(0, 9 - int(self.pt))), (W // 2, 116), 40, (255, 255, 255))
             art.say(surf, "Big button: keep fighting", (W // 2, 160), 18, (220, 220, 235))
         if self.phase == "complete":
-            art.say(surf, "LEVEL 1 COMPLETE", (W // 2, 90), 34, (255, 220, 80))
-            art.say(surf, "Tower Row: Fair Tax Act", (W // 2, 128), 20, (255, 255, 255))
+            art.say(surf, "LEVEL %d COMPLETE" % self.L["n"], (W // 2, 90), 34, (255, 220, 80))
+            art.say(surf, " ".join(self.L["headline"]), (W // 2, 128), 18, (255, 255, 255))
+        if self.phase == "intro" and self.pt < 2.0 and self.talk_i == 0:
+            art.say(surf, "LEVEL %d" % self.L["n"], (W // 2, 50), 30, (255, 220, 80))
+            art.say(surf, self.L["name"].upper(), (W // 2, 80), 24, (255, 255, 255))
         if self.fade > 0:
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, int(255 * min(1.0, self.fade / 0.6))))
             surf.blit(shade, (0, 0))
+
+    def draw_select(self, surf):
+        art.street(surf, 400 + self.pt * 10, self.time)
+        shade = pygame.Surface((W, H), pygame.SRCALPHA)
+        shade.fill((6, 6, 20, 170))
+        surf.blit(shade, (0, 0))
+        art.say(surf, "CHOOSE A LEVEL", (W // 2, 10), 28, (255, 220, 80))
+        for i, L in enumerate(LEVELS):
+            y = 44 + i * 26
+            open_ = i < self.unlocked
+            sel = i + 1 == self.choice
+            r = pygame.Rect(70, y, W - 140, 22)
+            pygame.draw.rect(surf, (60, 140, 200) if sel else ((30, 50, 80) if open_ else (30, 30, 40)), r, border_radius=4)
+            if sel:
+                pygame.draw.rect(surf, (255, 220, 80), r, 2, border_radius=4)
+            label = "%d  %s" % (L["n"], L["name"]) if open_ else "%d  ???" % L["n"]
+            art.say(surf, label, (84, y + 3), 18, (255, 255, 255) if open_ else (120, 120, 130), center=False)
+        art.say(surf, "Up/down: choose   Big button: fight", (W // 2, 210), 16, (220, 220, 235))
 
     def sprite_for(self, p):
         s = p.state
@@ -1185,7 +1229,7 @@ class BlackWarrior(Game):
             pose = MOVES[p.move][7] if p.move else "idle0"
         elif s == "jump":
             pose = {"kick": "jumpk", "elbow": "elbow"}.get(p.air, "tuck")
-        elif s in ("hit",):
+        elif s == "hit":
             pose = "hit"
         elif s in ("fly", "down"):
             return art.lying(art.hero("hit", p.masked, p.face))
@@ -1204,69 +1248,90 @@ class BlackWarrior(Game):
         return art.hero(pose, p.masked, p.face)
 
     def blit_fighter(self, surf, img, x, y, z, face):
-        ax = art.HX + 1 if face > 0 else img.get_width() - 2 - art.HX
-        if img.get_width() > 70:        # lying down: centered
+        if img.get_width() > 70:
             surf.blit(img, (int(x - img.get_width() / 2), int(y - z - img.get_height() + 4)))
             return
+        ax = art.HX + 1 if face > 0 else img.get_width() - 2 - art.HX
         surf.blit(img, (int(x - ax), int(y - z - (art.FEET_Y + 1))))
 
     def enemy_sprite(self, e):
-        s = e.state
-        if e.kind == "butler":
-            img = art.butler(int(e.anim * 8), e.face, s == "attack")
-            if s in ("fly", "down", "out"):
-                img = art.lying(img)
-            return img
+        s, st = e.state, e.style
+        if st == "flyer":
+            return cast.flyer(e.kind, e.anim)
+        if st == "puff":
+            return cast.puff(e.anim, e.flash > 0)
+        if st == "thrower":
+            img = cast.robot(e.kind, int(e.anim * 8), e.face, s == "attack")
+            return art.lying(img) if s in ("fly", "down", "out") else img
         if s in ("fly", "down", "out"):
-            return art.lying(art.goon(e.kind, "hit", e.face))
+            return art.lying(cast.goon(e.kind, "hit", e.face))
         pose = {"walk": "walk%d" % (int(e.anim * 8) % 4), "attack": "jab" if e.st > 0.15 else "idle1",
                 "hurt": "hit", "dazed": "idle1", "held": "hit", "bitten": "hit", "getup": "getup"}.get(s, "idle0")
-        return art.goon(e.kind, pose, e.face)
+        return cast.goon(e.kind, pose, e.face)
 
     def draw_world(self, surf):
-        cam = int(self.cam) if self.scene_i < 2 else 0
-        items = []
-        for w in self.weapons:
-            items.append((w["y"], 0, "weapon", w))
+        cam = 0 if self.fixed else int(self.cam)
+        p = self.p
+        for d in self.debris:
+            if d[2] < 0.9:
+                r = int(4 + d[2] * 10)
+                pygame.draw.ellipse(surf, (40, 20, 20), (int(d[0] - r), int(d[1] - r / 3), r * 2, int(r / 1.5)))
+                fy = int(d[1] - 160 * (1 - d[2] / 0.9))
+                pygame.draw.rect(surf, (200, 160, 40), (int(d[0] - 10), fy - 6, 20, 6))
+            else:
+                pygame.draw.rect(surf, (200, 160, 40), (int(d[0] - 10), int(d[1] - 6), 20, 6))
+        items = [(w["y"], 0, "weapon", w) for w in self.weapons]
         if self.token is not None:
             items.append((self.token["y"], 1, "token", self.token))
+        if self.crate is not None:
+            items.append((self.crate["y"], 1, "crate", self.crate))
         for e in self.enemies:
             items.append((e.y, 2, "enemy", e))
-        if self.mazee is not None:
-            items.append((self.mazee["y"], 3, "mazee", self.mazee))
-        items.append((self.p.y, 4, "hero", self.p))
-        if self.boss is not None and self.phase in ("boss", "boss_intro"):
-            items.append((self.boss["y"], 1, "boss", self.boss))
+        if self.guest is not None:
+            items.append((self.guest.y, 3, "guest", self.guest))
+        items.append((p.y, 4, "hero", p))
+        if self.boss is not None and self.phase in ("boss", "boss_intro", "ride", "continue"):
+            items.append((self.boss.y, 1, "boss", self.boss))
+        if self.scene == "ramp":
+            art.shadow(surf, p.x, p.y, 54)
+            stages.gurney(surf, p.x, p.y)
         items.sort(key=lambda it: (it[0], it[1]))
         for _, _, kind, o in items:
             if kind == "weapon":
                 surf.blit(art.weapon_img(o["kind"]), (int(o["x"] - cam - 12), int(o["y"] - 4)))
             elif kind == "token":
                 art.shadow(surf, o["x"] - cam, o["y"], 18)
-                surf.blit(art.token(o["t"]), (int(o["x"] - cam - 12), int(o["y"] - 30 + math.sin(o["t"] * 3) * 3)))
+                surf.blit(self.token_img(o), (int(o["x"] - cam - 12), int(o["y"] - 30 + math.sin(o["t"] * 3) * 3)))
+            elif kind == "crate":
+                x, y = int(o["x"] - cam), int(o["y"])
+                art.shadow(surf, x, y, 26)
+                pygame.draw.rect(surf, art.OUT, (x - 12, y - 22, 24, 22))
+                pygame.draw.rect(surf, (170, 120, 70), (x - 11, y - 21, 22, 20))
+                pygame.draw.line(surf, (120, 80, 40), (x - 11, y - 21), (x + 10, y - 2), 2)
+                pygame.draw.line(surf, (120, 80, 40), (x + 10, y - 21), (x - 11, y - 2), 2)
             elif kind == "enemy":
                 if not o.alive and int(o.st * 12) % 2:
                     continue
                 art.shadow(surf, o.x - cam, o.y)
                 img = self.enemy_sprite(o)
-                if o.flash > 0:
+                if o.flash > 0 and o.style != "puff":
                     img = art.white(img)
-                self.blit_fighter(surf, img, o.x - cam, o.y, o.z, o.face)
+                if o.style in ("flyer", "puff"):
+                    surf.blit(img, (int(o.x - cam - img.get_width() / 2), int(o.y - o.z - 30)))
+                else:
+                    self.blit_fighter(surf, img, o.x - cam, o.y, o.z, o.face)
+                if o.riding:
+                    stages.gurney(surf, o.x - cam, o.y)
                 if o.state == "dazed":
                     art.stars(surf, o.x - cam, o.y - 52, self.time)
-            elif kind == "mazee":
-                img = art.mazee(int(o["anim"] * 10), o["face"], o["state"] in ("fight", "fetch"))
-                art.shadow(surf, o["x"] - cam, o["y"], 40)
-                surf.blit(img, (int(o["x"] - cam - img.get_width() / 2), int(o["y"] - img.get_height() + 3)))
+            elif kind == "guest":
+                o.draw(surf, self, cam)
             elif kind == "boss":
-                img = art.trillion_heir(self.time, o["state"] == "tired", o["hat"])
-                if o["flash"] > 0:
-                    img = art.white(img)
-                art.shadow(surf, o["x"], o["y"], 56)
-                surf.blit(img, (int(o["x"] - img.get_width() / 2), int(o["y"] - o["z"] - img.get_height() + 10)))
+                o.draw(surf, self)
             else:
-                p = o
-                if p.inv > 0 and int(self.time * 16) % 2 and p.state not in ("special", "flurry", "dodge"):
+                if p.inv > 0 and int(self.time * 16) % 2 and p.state not in ("special", "flurry", "dodge", "cut"):
+                    continue
+                if p.state == "cut" and self.guest is not None and self.guest.kind == "uncle_t":
                     continue
                 art.shadow(surf, p.x - cam, p.y)
                 img = self.sprite_for(p)
@@ -1283,15 +1348,35 @@ class BlackWarrior(Game):
                     flash = pygame.Surface((W, H), pygame.SRCALPHA)
                     flash.fill((120, 200, 255, 50))
                     surf.blit(flash, (0, 0))
+                if self.scramble > 0:
+                    art.say(surf, "?!", (int(p.x - cam), int(p.y - 70)), 16, (255, 120, 255))
         for pr in self.projs:
             x, y = int(pr["x"] - cam), int(pr["y"] - pr["z"])
             art.shadow(surf, pr["x"] - cam, pr["y"], 10)
-            if pr["kind"] == "coin":
+            k = pr["kind"]
+            if k == "coin":
                 surf.blit(art.coin(), (x - 4, y - 4))
-            elif pr["kind"] == "tray":
+            elif k == "tray":
                 surf.blit(art.tray(), (x - 6, y - 3))
+            elif k in ("notice", "slip"):
+                pygame.draw.rect(surf, art.OUT, (x - 5, y - 4, 10, 8))
+                pygame.draw.rect(surf, (250, 250, 240), (x - 4, y - 3, 8, 6))
+                pygame.draw.line(surf, (220, 40, 40), (x - 3, y - 1), (x + 3, y - 1))
+            elif k == "box":
+                pygame.draw.rect(surf, art.OUT, (x - 6, y - 5, 12, 10))
+                pygame.draw.rect(surf, (200, 150, 90), (x - 5, y - 4, 10, 8))
+            elif k == "soot":
+                pygame.draw.circle(surf, (40, 36, 34), (x, y), 5)
+                pygame.draw.circle(surf, (250, 120, 40), (x - 1, y - 1), 1)
+            elif k == "static":
+                for j in range(6):
+                    v = ((j * 37 + int(self.time * 60)) % 5) * 50
+                    surf.fill((v, v, 255), (x - 6 + (j % 3) * 4, y - 4 + (j // 3) * 4, 4, 4))
+            elif k == "stun":
+                pygame.draw.circle(surf, (255, 240, 120), (x, y), 3)
+                pygame.draw.circle(surf, (255, 255, 255), (x, y), 1)
             else:
-                img = art.weapon_img(pr["kind"], pr.get("spin", 0))
+                img = art.weapon_img(k, pr.get("spin", 0))
                 surf.blit(img, (x - img.get_width() // 2, y - img.get_height() // 2))
         for kind, x, y, t, big in self.fx:
             if kind == "spark":
@@ -1304,6 +1389,17 @@ class BlackWarrior(Game):
         for msg, (x, y), t in self.bubbles:
             art.bubble(surf, msg, x - cam, y)
 
+    def token_img(self, tk):
+        s = art.token(tk["t"])
+        if tk["guest"] == "mazee":
+            return s
+        s = s.copy()
+        pygame.draw.circle(s, art.BLUE[2], (12, 12), 8)
+        face = {"uncle_t": "uncle_t", "stephen": "stephen", "squad": "miles", "pops": "pops"}[tk["guest"]]
+        head = cast.guest_fig(face, "idle0", 1).subsurface((art.HX - 7, 4, 16, 16))
+        s.blit(pygame.transform.scale(head, (12, 12)), (6, 5))
+        return s
+
     def draw_talk(self, surf):
         if self.talk_i >= len(self.talk):
             return
@@ -1312,13 +1408,13 @@ class BlackWarrior(Game):
         pygame.draw.rect(surf, art.OUT, box)
         pygame.draw.rect(surf, (24, 22, 40), box.inflate(-4, -4))
         pygame.draw.rect(surf, art.BLUE[1], box.inflate(-4, -4), 1)
-        img = art.heir_portrait() if masked is None else art.portrait(masked)
+        img = self.boss_portrait() if masked is None else art.portrait(masked)
         surf.blit(pygame.transform.scale(img, (78, 78)), (8, 154))
         pygame.draw.rect(surf, art.GOLD[2] if masked is None else art.BLUE[2], (8, 154, 78, 78), 1)
         art.say(surf, who, (94, 156), 18, art.GOLD[2] if masked is None else (255, 220, 80), center=False)
         shown = line[:int(self.pt * 45)]
-        words, lines, cur = shown.split(" "), [], ""
-        for w_ in words:
+        lines, cur = [], ""
+        for w_ in shown.split(" "):
             if art.font(16).size(cur + " " + w_)[0] > 290:
                 lines.append(cur)
                 cur = w_
@@ -1329,6 +1425,25 @@ class BlackWarrior(Game):
             surf.blit(art.font(16).render(ln, False, (240, 240, 250)), (94, 176 + i * 15))
         if self.pt * 45 >= len(line) and int(self.time * 2) % 2 == 0:
             pygame.draw.polygon(surf, (255, 220, 80), [(380, 222), (388, 222), (384, 228)])
+
+    def boss_portrait(self):
+        key = ("bossp", self.L["boss"])
+        img = art._cache.get(key)
+        if img is not None:
+            return img
+        if self.L["boss"] == "heir":
+            img = art.heir_portrait()
+        else:
+            img = pygame.Surface((96, 96))
+            for y in range(96):
+                img.fill((int(40 + 40 * y / 96), 20, int(40 + 30 * y / 96)), (0, y, 96, 1))
+            fig = {"pig": lambda: cast.capitalist_pig(0, "walk"), "poverty": lambda: cast.mister_poverty(0),
+                   "eviction": lambda: cast.madame_eviction(0, "ground"), "smog": lambda: cast.baron_smog(0),
+                   "biglie": lambda: cast.big_lie(0)}[self.L["boss"]]()
+            fig = pygame.transform.scale(fig, (int(fig.get_width() * 1.4), int(fig.get_height() * 1.4)))
+            img.blit(fig, (48 - fig.get_width() // 2, 6))
+        art._cache[key] = img
+        return img
 
     def draw_hud(self, surf):
         p = self.p
@@ -1357,34 +1472,44 @@ class BlackWarrior(Game):
                 glow = (255, 240, 160) if fill >= 1 and int(self.time * 6) % 2 else (255, 210, 120)
                 pygame.draw.rect(surf, glow, (r.x, r.y, int(r.w * fill), r.h))
         art.say(surf, "%07d" % int(self.score), (W // 2, 2), 18, (255, 255, 255))
-        label = {"street": "TOWER ROW", "lobby": "TRILLION TOWER LOBBY", "elevator": "THE GLASS ELEVATOR",
-                 "penthouse": "THE PENTHOUSE"}[self.scene]
+        label = self.sc["label"]
+        if self.sc["kind"] == "ride":
+            label += "  %s %d" % (self.sc["unit"], int(self.prog))
         art.say(surf, label, (W // 2, 18), 14, art.GOLD[2])
-        m = self.mazee
-        if m is not None and m["state"] != "leave":
-            g = pygame.Rect(W - 28, 4, 24, 24)
-            pygame.draw.rect(surf, art.OUT, g.inflate(2, 2))
-            pygame.draw.rect(surf, (40, 40, 70), g)
-            head = pygame.transform.scale(art.mazee(0), (40, 18))
-            surf.blit(head, (g.x - 14, g.y + 4), area=pygame.Rect(14, 0, 24, 18))
-            ring = max(0.0, m["t"] / 15.0)
-            pygame.draw.arc(surf, art.BLUE[2], g.inflate(8, 8), math.pi / 2, math.pi / 2 + math.tau * ring, 2)
-            art.say(surf, "MAZEE", (W - 66, 4), 14, (240, 240, 250), center=False)
+        g = self.guest
+        if g is not None and g.state != "leave":
+            gb = pygame.Rect(W - 28, 4, 24, 24)
+            pygame.draw.rect(surf, art.OUT, gb.inflate(2, 2))
+            surf.blit(pygame.transform.scale(self.token_img({"t": 0.0, "guest": g.kind}), (24, 24)), gb)
+            ring = max(0.0, g.t / guests.DURATION)
+            pygame.draw.arc(surf, art.BLUE[2], gb.inflate(8, 8), math.pi / 2, math.pi / 2 + math.tau * ring, 2)
+            name = g.lines["name"]
+            art.say(surf, name, (W - 36 - art.font(14).size(name)[0], 4), 14, (240, 240, 250), center=False)
         b = self.boss
-        if b is not None and self.phase == "boss":
-            art.say(surf, "THE TRILLION HEIR", (W // 2, 214), 14, art.GOLD[2])
+        if b is not None and b.hp > 0 and self.phase in ("boss", "ride"):
+            name = b.name if not b.mini else b.name + " (REMATCH)"
+            art.say(surf, name, (W // 2, 214), 14, art.GOLD[2])
             pygame.draw.rect(surf, art.OUT, (99, 227, 202, 8))
             pygame.draw.rect(surf, (70, 20, 30), (100, 228, 200, 6))
-            pygame.draw.rect(surf, art.GOLD[2], (100, 228, int(200 * b["hp"] / b["max"]), 6))
+            pygame.draw.rect(surf, art.GOLD[2], (100, 228, int(200 * b.hp / b.max), 6))
 
+    # ------------------------------------------------------------ cutscenes
     def draw_katana(self, surf):
         t, p, b = self.pt, self.p, self.boss
+        target = self.L["katana"]["target"]
         dim = pygame.Surface((W, H), pygame.SRCALPHA)
         dim.fill((6, 8, 30, int(min(150, t * 160)) if t < 6.5 else int(max(0, 150 - (t - 6.5) * 150))))
         surf.blit(dim, (0, 0))
-        img = art.trillion_heir(self.time, True, b["hat"])
-        art.shadow(surf, b["x"], b["y"], 56)
-        surf.blit(img, (int(b["x"] - img.get_width() / 2), int(b["y"] - b["z"] - img.get_height() + 10)))
+        self.draw_target(surf, target, t)
+        b.draw(surf, self)
+        if target == "broadcast":                 # the whole crew stands with Quick at the end
+            for i, kind in enumerate(("mazee", "uncle_t", "stephen", "miles", "felix", "pops")):
+                x = 20 + i * 18
+                if kind == "mazee":
+                    surf.blit(art.mazee(0, 1, True), (x - 20, 196))
+                else:
+                    img = cast.guest_fig(kind, "victory" if t > 3.4 else "idle0", 1)
+                    surf.blit(img, (x - art.HX - 1, 214 - art.FEET_Y - 1))
         rx, ry = 120, 160
         if t < 6.0:
             size = min(1.0, t)
@@ -1395,23 +1520,17 @@ class BlackWarrior(Game):
         if t < 2.6 or 6.0 <= t < 6.9:
             art.rift(surf, rx, ry, size, self.time)
         pose = "idle0"
-        if 1.0 <= t < 2.6:
+        if 1.0 <= t < 2.6 or 6.0 <= t < 6.8:
             pose = "draw"
         elif 2.6 <= t < 6.0:
             pose = "strike"
-        elif 6.0 <= t < 6.8:
-            pose = "draw"
         elif t >= 7.6:
             pose = "victory"
-        vic = art.hero(pose, p.masked, p.face)
         art.shadow(surf, p.x, p.y)
-        self.blit_fighter(surf, vic, p.x, p.y, 0, p.face)
+        self.blit_fighter(surf, art.hero(pose, p.masked, p.face), p.x, p.y, 0, p.face)
         if 1.2 <= t < 2.6:
             grow = min(1.0, (t - 1.2) / 0.8)
             art.katana(surf, (p.x - 10, p.y - 36), math.radians(200 - 40 * grow), 14 + 30 * grow)
-        elif 2.6 <= t < 6.0:
-            art.katana(surf, (p.x + 14, p.y - 30), math.radians(-10), 44)
-        if 1.2 <= t < 2.6:              # close-up: the masked portrait, lenses blazing
             k = min(1.0, (t - 1.2) / 0.25)
             px_ = int(-150 + 160 * k)
             panel = pygame.Rect(px_, 30, 150, 110)
@@ -1419,21 +1538,16 @@ class BlackWarrior(Game):
             surf.blit(pygame.transform.scale(art.portrait(True), (150, 150)), panel.topleft, area=pygame.Rect(0, 20, 150, 110))
             pygame.draw.rect(surf, art.BLUE[2], panel, 2)
             art.say(surf, "DAYBREAK", (px_ + 236, 70), 34, art.BLUE[3])
-        if 2.9 <= t < 3.4:              # the strike: a white flash and one long cut across the vault chain
+        elif 2.6 <= t < 6.0:
+            art.katana(surf, (p.x + 14, p.y - 30), math.radians(-10), 44)
+        if 2.9 <= t < 3.4:
             a = int(255 * (1 - (t - 2.9) / 0.5))
             flash = pygame.Surface((W, H), pygame.SRCALPHA)
             flash.fill((255, 255, 255, a))
             surf.blit(flash, (0, 0))
-            pygame.draw.line(surf, art.BLUE[3], (40, 120), (380, 60), 3)
-        if 3.4 <= t < 6.5:              # gold pours from the vault down to the city
-            for k in range(40):
-                ct = (t - 3.4) * 1.3 + k * 0.08
-                cx = 316 + math.sin(k * 1.7) * 30 + ct * 18
-                cy = 86 + (ct % 2.0) * 90
-                if cy < 236:
-                    surf.blit(art.coin(), (int(cx), int(cy)))
-            if t > 4.0:
-                art.say(surf, "To the schools!", (316, 18), 16, art.GOLD[3])
+            pygame.draw.line(surf, art.BLUE[3], (40, 140), (380, 50), 3)
+        if t > 4.0:
+            art.say(surf, self.L["katana"]["shout"], (W // 2, 18), 18, art.GOLD[3])
         for msg, (x, y), tt in self.bubbles:
             art.bubble(surf, msg, x, y)
         if t > 8.4:
@@ -1441,33 +1555,155 @@ class BlackWarrior(Game):
             shade.fill((0, 0, 0, int(min(255, (t - 8.4) * 320))))
             surf.blit(shade, (0, 0))
 
+    def draw_target(self, surf, target, t):
+        """What Daybreak cuts, and what follows: different for every boss."""
+        cut = t >= 3.0
+        after = max(0.0, t - 3.4)
+        if target == "vault" and after > 0:
+            for k in range(40):
+                ct = after * 1.3 + k * 0.08
+                cx = 316 + math.sin(k * 1.7) * 30 + ct * 18
+                cy = 86 + (ct % 2.0) * 90
+                if cy < 236:
+                    surf.blit(art.coin(), (int(cx), int(cy)))
+        elif target == "stamp":
+            if not cut:
+                pygame.draw.rect(surf, (120, 70, 40), (340, 40, 10, 60))
+                pygame.draw.rect(surf, (160, 30, 40), (318, 96, 54, 26))
+                art.say(surf, "DENIED", (345, 100), 16, (255, 220, 220))
+            else:
+                pygame.draw.rect(surf, (40, 140, 70), (300, 170, 30, 22))
+                pygame.draw.rect(surf, (40, 140, 70), (334, 176, 30, 22))
+                art.say(surf, "APPROVED", (332, 150), 18, (120, 255, 160))
+                for k in range(12):
+                    u = after * 0.6 + k * 0.09
+                    x = 320 + math.cos(k) * 40 + u * 60 * (1 if k % 2 else -1)
+                    y = 120 - u * 80 + math.sin(u * 8 + k) * 4
+                    if y > -10:
+                        pygame.draw.polygon(surf, (250, 250, 250), [(x, y), (x + 6, y - 3), (x + 4, y + 2)])
+                        pygame.draw.polygon(surf, (250, 250, 250), [(x, y), (x - 6, y - 3), (x - 4, y + 2)])
+        elif target == "chains":
+            if not cut:
+                gray = pygame.Surface((W, H), pygame.SRCALPHA)
+                gray.fill((60, 60, 70, 110))
+                surf.blit(gray, (0, 0))
+                for wx in (30, 60, 360, 386):
+                    cast.bills_chain(surf, 300, 150, wx, 200, self.time)
+                    pygame.draw.rect(surf, (120, 120, 130), (wx - 4, 180, 8, 22))
+            else:
+                for wx in (30, 60, 360, 386):
+                    img = art.citizen(wx % 3, "victory", 1 if wx < 200 else -1)
+                    surf.blit(img, (wx - art.HX - 1, 214 - art.FEET_Y - 1))
+        elif target == "cable":
+            cast.crane(surf, 70, 30, 300)
+            if not cut:
+                cast.wrecking_ball(surf, 300, 120, (300, 40))
+            else:
+                y = min(206, 120 + after * 300)
+                pygame.draw.ellipse(surf, (230, 210, 150), (260, 200, 80, 20))
+                cast.wrecking_ball(surf, 300, y, (300, 40 + int(min(166, after * 300))))
+        elif target == "smog":
+            cover = 1.0 if not cut else max(0.0, 1 - after / 1.5)
+            if cover > 0:
+                cloud = pygame.Surface((W, 120), pygame.SRCALPHA)
+                for k in range(14):
+                    pygame.draw.circle(cloud, (60, 56, 54, int(220 * cover)), (k * 30 + int(math.sin(self.time + k) * 6), 50), 34)
+                surf.blit(cloud, (0, 0))
+            if cut:
+                for k in range(5):
+                    beam = pygame.Surface((30, 200), pygame.SRCALPHA)
+                    beam.fill((255, 240, 180, int(70 * (1 - cover))))
+                    surf.blit(pygame.transform.rotate(beam, 20), (40 + k * 80, 0))
+        elif target == "broadcast":
+            if not cut:
+                pygame.draw.line(surf, (40, 40, 48), (360, 0), (320, 130), 4)
+                pygame.draw.circle(surf, (240, 60, 60), (360, 6), 5)
+            else:
+                for k in range(16):
+                    u = after * 0.5 + k * 0.07
+                    x = 200 + math.cos(k * 1.3) * 120 + math.sin(u * 3) * 10
+                    y = 200 - u * 120
+                    if y > -10:
+                        pygame.draw.rect(surf, (250, 250, 240), (int(x) - 4, int(y) - 3, 8, 6))
+                        pygame.draw.line(surf, (40, 100, 200), (int(x) - 2, int(y)), (int(x) + 2, int(y)))
+                for k in range(30):
+                    surf.fill([(220, 60, 60), (250, 220, 60), (60, 140, 230)][k % 3],
+                              (int((k * 53 + after * 80) % W), int((k * 31 + after * 60) % 140), 3, 3))
+
     def draw_reform(self, surf):
         t = self.pt
+        first = next(s["stage"] for s in self.L["scenes"] if s["kind"] == "walk")
         if t < 3.5:
-            art.street(surf, 1060, self.time)
+            stages.stage(surf, first, 600, self.time)
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 160))
             surf.blit(shade, (0, 0))
-            art.newspaper(surf, ["FAIR TAX ACT", "PASSES"], "Largest fortunes finally pay their share", t)
+            art.newspaper(surf, self.L["headline"], self.L["sub"], t)
             return
         k = t - 3.5
-        cam = 120 + k * 40
-        art.street(surf, cam, self.time, morning=True)
-        art.bus(surf, int(-90 + k * 70) % 560 - 80, 166)
+        stages.stage(surf, first, 120 + k * 40, self.time, morning=True)
+        n = self.L["n"]
+        if n == 1:
+            art.bus(surf, int(-90 + k * 70) % 560 - 80, 166)
+        elif n == 3:
+            stages.food_truck(surf, 250, 160)
+        elif n == 4:
+            stages.garden(surf, 220, 180)
+        elif n == 6:
+            stages.bunting(surf, 40, self.time)
         for i in range(5):
             x = (i * 97 + k * (25 + i * 6)) % (W + 60) - 30
             y = 186 + (i * 13) % 40
             art.shadow(surf, x, y)
             img = art.citizen(i, "walk%d" % (int(k * 8 + i) % 4), 1)
             surf.blit(img, (int(x - art.HX - 1), int(y - art.FEET_Y - 1)))
-        vic = art.hero("victory" if int(k) % 4 == 0 else "idle0", False, 1)
+        hero = art.hero("victory" if int(k) % 4 == 0 else "idle0", False, 1)
         art.shadow(surf, 200, 212)
-        surf.blit(vic, (200 - art.HX - 1, 212 - art.FEET_Y - 1))
+        surf.blit(hero, (200 - art.HX - 1, 212 - art.FEET_Y - 1))
         box = pygame.Rect(30, 18, W - 60, 40)
         pygame.draw.rect(surf, art.OUT, box.inflate(2, 2), border_radius=4)
         pygame.draw.rect(surf, (250, 246, 236), box, border_radius=4)
-        art.say(surf, "Schools repaired. New buses.", (W // 2, 22), 18, (40, 40, 60), outline=(250, 246, 236))
-        art.say(surf, "The library stays open late.", (W // 2, 38), 18, (40, 40, 60), outline=(250, 246, 236))
+        for i, line in enumerate(self.L["city"]):
+            art.say(surf, line, (W // 2, 22 + i * 16), 18, (40, 40, 60), outline=(250, 246, 236))
+
+    CREDITS = ["BLACK WARRIOR", "", "Quick", "Mazee", "Uncle T", "Stephen", "Miles and Felix", "Pops", "",
+               "Fair taxes. Care for all.", "A floor under everyone.", "Homes for all. Clean air.",
+               "Every vote counts.", "", "Confluence City, transformed.", "", "Thanks for playing!"]
+
+    def draw_ending(self, surf):
+        t = self.pt
+        stages.district(surf, "pier", 200 + t * 6, self.time, morning=True)
+        stages.bunting(surf, 30, self.time)
+        stages.bunting(surf, 60, self.time + 1)
+        stages.food_truck(surf, 300, 150)
+        for i in range(4):
+            x = (i * 90 + t * 20) % (W + 40) - 20
+            img = art.citizen(i, "walk%d" % (int(t * 8 + i) % 4), 1)
+            surf.blit(img, (int(x - art.HX - 1), int(190 + i * 6 - art.FEET_Y - 1)))
+        crew = [("pops", 60), ("uncle_t", 90), ("stephen", 120), ("miles", 250), ("felix", 275)]
+        for kind, x in crew:
+            img = cast.guest_fig(kind, "victory" if int(t + x) % 3 == 0 else "idle0", 1 if x < 200 else -1)
+            surf.blit(img, (x - art.HX - 1, 214 - art.FEET_Y - 1))
+        surf.blit(art.mazee(int(t * 4), 1, False), (150, 196))
+        hero = art.hero("victory" if int(t * 2) % 2 == 0 else "idle0", False, 1)
+        surf.blit(hero, (200 - art.HX - 1, 216 - art.FEET_Y - 1))
+        if t > 16:                         # the rift closes, and Mazee barks at it
+            size = max(0.0, 1 - (t - 16) / 2.5)
+            art.rift(surf, 340, 120, size, self.time)
+            if 18.5 < t < 20:
+                art.bubble(surf, "Woof!", 170, 186)
+        box = pygame.Surface((220, 110), pygame.SRCALPHA)
+        box.fill((10, 10, 30, 150))
+        surf.blit(box, (90, 14))
+        for i, line in enumerate(self.CREDITS):
+            y = 124 + i * 16 - t * 14
+            if 14 <= y <= 112:
+                art.say(surf, line, (W // 2, int(y)), 18 if i == 0 else 16, (255, 220, 80) if i == 0 else (255, 255, 255))
+
+    def render(self, surf):
+        super().render(surf)
+        if self.state == "over" and self.win:
+            art.say(surf, "Confluence City is free!", (W // 2, 30), 22, c.YELLOW)
 
 
 def make(**kw):

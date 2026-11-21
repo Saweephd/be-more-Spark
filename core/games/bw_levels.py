@@ -1,0 +1,182 @@
+"""Black Warrior: the six levels as data.
+
+Each level lists its scenes in order. A "walk" scene scrolls with fight zones
+(waves of enemies), weapons, a guest's Tag Token and sometimes a crate hiding a
+repeat guest. A "ride" scene is the set piece: the camera holds still while
+something moves (an elevator, a gurney, a conveyor, a crane, a barge, or the
+City Hall hallway), with waves at stops. A "boss" scene is the boss arena.
+"""
+
+# enemy kinds: hp, speed, reach, damage, cooldown, points, style
+ENEMY = {
+    "valet": (30, 46, 22, 6, 1.3, 300, "brawler"),
+    "security": (42, 40, 24, 8, 1.5, 500, "brawler"),
+    "butler": (34, 54, 20, 5, 1.6, 400, "thrower"),
+    "biller": (34, 44, 22, 7, 1.3, 350, "brawler"),
+    "collector": (46, 40, 24, 9, 1.5, 550, "brawler"),
+    "authdrone": (18, 60, 0, 6, 2.2, 300, "flyer"),
+    "picker": (34, 50, 22, 7, 1.2, 350, "brawler"),
+    "foreman": (50, 38, 26, 10, 1.6, 600, "brawler"),
+    "gigbot": (36, 56, 20, 6, 1.5, 450, "thrower"),
+    "demo": (46, 38, 28, 11, 1.7, 600, "brawler"),
+    "repo": (38, 46, 22, 8, 1.3, 450, "brawler"),
+    "bailiff": (36, 50, 20, 7, 1.5, 450, "thrower"),
+    "millhand": (44, 42, 24, 9, 1.4, 500, "brawler"),
+    "smogbot": (36, 50, 20, 7, 1.5, 450, "thrower"),
+    "smog": (16, 30, 0, 6, 0.0, 250, "puff"),
+    "spin": (44, 46, 24, 9, 1.3, 550, "brawler"),
+    "fakenews": (20, 66, 0, 7, 2.0, 350, "flyer"),
+}
+
+GUESTS = {
+    "mazee": {"name": "MAZEE", "greet": "Hey Mazee!", "bye": "Thanks for the assist, Mazee! Good girl!"},
+    "uncle_t": {"name": "UNCLE T", "greet": "Uncle T! Perfect timing!", "bye": "Thanks for the assist, Uncle T! Go get that new phone."},
+    "stephen": {"name": "STEPHEN", "greet": "Stephen! Bring the heavy stuff!", "bye": "Thanks for the assist, bro!"},
+    "squad": {"name": "MILES + FELIX", "greet": "Miles! Felix! Squad up!", "bye": "Thanks for the assist, soldiers!"},
+    "pops": {"name": "POPS", "greet": "Pops! You made it!", "bye": "Thanks for the assist, Pops!"},
+}
+GUEST_ORDER = ["mazee", "uncle_t", "stephen", "squad", "pops"]
+
+
+def _z(at, *waves):
+    return {"at": at, "waves": [list(w) for w in waves]}
+
+
+LEVELS = [
+    {"n": 1, "name": "Tower Row", "guest": "mazee", "boss": "heir", "boss_name": "THE TRILLION HEIR",
+     "scenes": [
+         {"kind": "walk", "stage": "tower_street", "label": "TOWER ROW", "length": 1500,
+          "zones": [_z(240, ["valet", "valet"], ["valet", "security", "valet"]),
+                    _z(820, ["security", "valet"], ["valet", "security", "security"])],
+          "weapons": [(470, 200, "bat"), (1000, 180, "pipe")], "token": (650, 196)},
+         {"kind": "walk", "stage": "tower_lobby", "label": "TRILLION TOWER LOBBY", "length": 760,
+          "zones": [_z(200, ["butler", "security"], ["butler", "valet", "butler"], ["security", "butler"])],
+          "weapons": [(330, 196, "pipe")]},
+         {"kind": "ride", "stage": "elevator", "label": "THE GLASS ELEVATOR", "unit": "FLOOR", "end": 60,
+          "stops": [(15, ["valet", "butler"]), (30, ["security", "valet", "butler"]), (45, ["security", "security", "butler"])]},
+         {"kind": "boss", "stage": "penthouse", "label": "THE PENTHOUSE"}],
+     "intro": [("QUICK", False, "Tower Row. The Trillion Heir's private kingdom."),
+               ("QUICK", False, "Rent's up, the bus is cut, the school roof leaks..."),
+               ("QUICK", False, "...and he pays less tax than the diner."),
+               ("QUICK", False, "Time somebody sent him a bill.")],
+     "boss_talk": [("THE TRILLION HEIR", None, "Who let you in? This floor is for people born here."),
+                   ("QUICK", True, "Nice chair. Did you earn it, or did Grandpa leave it to you?"),
+                   ("THE TRILLION HEIR", None, "Butlers! Show this person the stairs!"),
+                   ("QUICK", True, "Your free ride ends tonight.")],
+     "katana": {"target": "vault", "boss_line": "My... first job?", "quick_line": "Welcome to the working world.",
+                "shout": "To the schools!"},
+     "headline": ["FAIR TAX ACT", "PASSES"], "sub": "Largest fortunes finally pay their share",
+     "city": ["Schools repaired. New buses.", "The library stays open late."]},
+
+    {"n": 2, "name": "Mercy General", "guest": "uncle_t", "boss": "pig", "boss_name": "THE CAPITALIST PIG",
+     "scenes": [
+         {"kind": "walk", "stage": "hospital_street", "label": "MERCY GENERAL", "length": 1500,
+          "zones": [_z(260, ["biller", "biller"], ["biller", "collector", "authdrone"]),
+                    _z(860, ["collector", "authdrone", "biller"], ["collector", "collector", "authdrone"])],
+          "weapons": [(500, 200, "pipe"), (1040, 190, "bat")], "token": (680, 196)},
+         {"kind": "ride", "stage": "ramp", "label": "THE PARKING RAMP", "unit": "LEVEL", "end": 60,
+          "stops": [(15, ["biller", "biller"]), (30, ["collector", "biller", "authdrone"]), (45, ["collector", "collector", "authdrone"])]},
+         {"kind": "walk", "stage": "billing_hall", "label": "THE BILLING TOWER", "length": 760,
+          "zones": [_z(200, ["biller", "authdrone"], ["collector", "biller", "authdrone"], ["collector", "collector"])],
+          "weapons": [(320, 196, "bat")]},
+         {"kind": "boss", "stage": "billing_floor", "label": "THE BILLING FLOOR"}],
+     "intro": [("QUICK", False, "Mercy General. Best doctors in the city."),
+               ("QUICK", False, "Shame you need a gold card to see one."),
+               ("QUICK", False, "Somebody up in that billing tower says no for a living.")],
+     "boss_talk": [("THE CAPITALIST PIG", None, "Do you have an appointment? A referral? A deductible?"),
+                   ("QUICK", True, "I've got a second opinion."),
+                   ("THE CAPITALIST PIG", None, "DENIED!"),
+                   ("QUICK", True, "Appeal noted.")],
+     "katana": {"target": "stamp", "boss_line": "Is... is there a wait?", "quick_line": "Take a number.",
+                "shout": "APPROVED!"},
+     "headline": ["CARE FOR ALL ACT", "PASSES"], "sub": "Single payer: everyone covered, no bills at the door",
+     "city": ["Free clinics open on every block.", "Medicine costs what it should."]},
+
+    {"n": 3, "name": "The Gig Docks", "guest": "stephen", "boss": "poverty", "boss_name": "MISTER POVERTY",
+     "scenes": [
+         {"kind": "walk", "stage": "docks", "label": "THE GIG DOCKS", "length": 1600,
+          "zones": [_z(260, ["picker", "picker"], ["picker", "gigbot", "foreman"]),
+                    _z(920, ["foreman", "gigbot"], ["picker", "foreman", "gigbot"])],
+          "weapons": [(520, 200, "pipe")], "token": (700, 196), "crate": (1180, 190)},
+         {"kind": "ride", "stage": "conveyor", "label": "THE FULFILLMENT CENTER", "unit": "PARCELS", "end": 60,
+          "stops": [(15, ["picker", "gigbot"]), (30, ["foreman", "picker"]), (45, ["foreman", "picker", "gigbot"])]},
+         {"kind": "walk", "stage": "pier", "label": "THE LAST PIER", "length": 800,
+          "zones": [_z(220, ["gigbot", "picker"], ["foreman", "gigbot", "picker"], ["foreman", "foreman"])],
+          "weapons": [(360, 196, "bat")]},
+         {"kind": "boss", "stage": "pier_end", "label": "THE END OF THE PIER"}],
+     "intro": [("QUICK", False, "The Gig Docks. Twelve hour shifts, no breaks, no floor under anybody."),
+               ("QUICK", False, "Everybody's one bad week from losing everything."),
+               ("QUICK", False, "Something out here feeds on that.")],
+     "boss_talk": [("MISTER POVERTY", None, "Every city keeps me. I am always here."),
+                   ("QUICK", True, "Not after tonight."),
+                   ("MISTER POVERTY", None, "Then come closer. Feel how cold it gets."),
+                   ("QUICK", True, "I brought a floor. Everybody stands on it.")],
+     "katana": {"target": "chains", "boss_line": "...", "quick_line": "Nobody falls through the floor now.",
+                "shout": "Color comes back!"},
+     "headline": ["UNIVERSAL BASIC", "INCOME PASSES"], "sub": "A monthly dividend for every resident",
+     "city": ["Shops reopen. A food truck rolls up.", "People have time to learn and build."]},
+
+    {"n": 4, "name": "The Old Ward", "guest": "squad", "boss": "eviction", "boss_name": "MADAME EVICTION",
+     "scenes": [
+         {"kind": "walk", "stage": "old_ward", "label": "THE OLD WARD", "length": 1600,
+          "zones": [_z(260, ["repo", "repo"], ["repo", "demo", "bailiff"]),
+                    _z(920, ["demo", "bailiff"], ["repo", "demo", "bailiff"], ["demo", "demo"])],
+          "weapons": [(500, 200, "pipe"), (1100, 190, "bat")], "token": (700, 196), "crate": (1250, 196)},
+         {"kind": "ride", "stage": "scaffold", "label": "THE SCAFFOLDING", "unit": "STORY", "end": 60,
+          "stops": [(15, ["demo", "repo"]), (30, ["demo", "bailiff", "repo"]), (45, ["demo", "demo", "bailiff"])]},
+         {"kind": "boss", "stage": "crane_site", "label": "THE CRANE SITE"}],
+     "intro": [("QUICK", False, "The Old Ward. I learned to ride a bike on this block."),
+               ("QUICK", False, "Now every door has a notice on it."),
+               ("QUICK", False, "Not my neighborhood. Not tonight.")],
+     "boss_talk": [("MADAME EVICTION", None, "Thirty days, darling. Make that three."),
+                   ("QUICK", True, "These families were here first."),
+                   ("MADAME EVICTION", None, "Rent's due, and so are you!"),
+                   ("QUICK", True, "Lease is up, lady.")],
+     "katana": {"target": "cable", "boss_line": "An eviction notice... for me?", "quick_line": "Thirty days. Make that three.",
+                "shout": "Everybody home!"},
+     "headline": ["HOMES FOR ALL", "ACT PASSES"], "sub": "Social housing and fair rents for every block",
+     "city": ["Rowhouses rebuilt. Families move back in.", "A community garden where the crane stood."]},
+
+    {"n": 5, "name": "Smokestack Bend", "guest": "pops", "boss": "smog", "boss_name": "BARON SMOG",
+     "scenes": [
+         {"kind": "walk", "stage": "mill_street", "label": "SMOKESTACK BEND", "length": 1600,
+          "zones": [_z(260, ["millhand", "smog"], ["millhand", "smogbot", "smog"]),
+                    _z(920, ["millhand", "smogbot", "smog"], ["millhand", "millhand", "smog", "smog"])],
+          "weapons": [(520, 200, "pipe")], "token": (700, 196), "crate": (1250, 190)},
+         {"kind": "ride", "stage": "barge", "label": "THE COAL BARGE", "unit": "BRIDGE", "end": 60,
+          "stops": [(15, ["millhand", "smog"]), (30, ["smogbot", "millhand", "smog"]), (45, ["millhand", "millhand", "smogbot"])]},
+         {"kind": "boss", "stage": "mill_yard", "label": "THE MILL YARD"}],
+     "intro": [("QUICK", False, "Smokestack Bend. You can taste the air down here."),
+               ("QUICK", False, "Kids can't play outside half the year."),
+               ("QUICK", False, "Time to clear the sky.")],
+     "boss_talk": [("BARON SMOG", None, "Breathe deep! It's the smell of profit!"),
+                   ("QUICK", True, "Smells like a cough."),
+                   ("BARON SMOG", None, "Nobody stops the furnace!"),
+                   ("QUICK", True, "Watch me.")],
+     "katana": {"target": "smog", "boss_line": "Cough! A... bicycle?", "quick_line": "Fresh air looks good on you.",
+                "shout": "Blue sky!"},
+     "headline": ["CLEAN AIR AND", "GREEN JOBS ACT"], "sub": "Clean energy works program hires the whole Bend",
+     "city": ["Blue sky. Solar roofs on every mill.", "Kids fishing off the clean river pier."]},
+
+    {"n": 6, "name": "City Hall", "guest": None, "boss": "biglie", "boss_name": "THE BIG LIE",
+     "scenes": [
+         {"kind": "walk", "stage": "hall_steps", "label": "CITY HALL", "length": 1400,
+          "zones": [_z(260, ["spin", "spin", "fakenews"], ["spin", "collector", "fakenews"]),
+                    _z(860, ["spin", "fakenews", "demo"], ["spin", "spin", "fakenews", "millhand"])],
+          "weapons": [(500, 200, "bat")], "crate": (700, 196)},
+         {"kind": "ride", "stage": "hallway", "label": "THE HALL OF RECORDS", "unit": "DOOR", "end": 60,
+          "stops": [(10, ["boss:heir"]), (20, ["boss:pig"]), (30, ["boss:poverty"]), (40, ["boss:eviction"]),
+                    (50, ["boss:smog"])]},
+         {"kind": "boss", "stage": "chamber", "label": "THE COUNCIL CHAMBER"}],
+     "intro": [("QUICK", False, "Every reform we won, they want to repeal tonight."),
+               ("QUICK", False, "One vote. One room. One lie holding it all together."),
+               ("QUICK", False, "Let's go to City Hall.")],
+     "boss_talk": [("THE BIG LIE", None, "NOTHING EVER CHANGES. EVERYONE AGREES."),
+                   ("QUICK", True, "Everybody in this city just watched it change."),
+                   ("THE BIG LIE", None, "THAT WAS FAKE. TUNE BACK IN."),
+                   ("QUICK", True, "Signal's over.")],
+     "katana": {"target": "broadcast", "boss_line": "...pfffft.", "quick_line": "Now everybody gets a say.",
+                "shout": "Every vote counts!"},
+     "headline": ["FAIR ELECTIONS", "ACT PASSES"], "sub": "Public campaign funding and easy voting for all",
+     "city": ["Confluence City, transformed.", "Everybody's at the riverfront festival."]},
+]
