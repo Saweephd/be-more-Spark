@@ -128,6 +128,31 @@ class SoldiersTests(unittest.TestCase):
         self.assertTrue(p["chute"] or p["on"])
         self.assertGreater(p["inv"], 0)
 
+    def test_respawn_is_fair(self):
+        g, inp = self.to_level()
+        p = g.players[0]
+        p["inv"] = 0
+        g.add_enemy("runner", p["x"] + 60, sv.GROUND)
+        g.ebullets.append({"x": p["x"] + 30, "y": p["y"] - 12, "vx": -50.0, "vy": 0.0, "g": 0.0})
+        g.kill_player(p)
+        self.assertEqual(g.ebullets, [])                       # enemy fire cleared
+        self.assertFalse([e for e in g.enemies if e["kind"] == "runner" and e["hp"] > 0 and abs(e["x"] - p["x"]) < 140])
+        g.add_enemy("shooter", p["x"] + 80, sv.GROUND)
+        g.enemies[-1]["cool"] = 0
+        self.frames(g, inp, 90)                                # dead, then parachuting
+        self.assertTrue(p["chute"])
+        self.assertEqual(g.ebullets, [])                       # nobody shoots at a parachute
+        self.frames(g, inp, 150)
+        self.assertTrue(p["on"])
+        self.assertGreater(p["inv"], 1.0)                      # safe time starts on landing
+        g.add_enemy("runner", p["x"] + 150, sv.GROUND)
+        e = g.enemies[-1]
+        g.update_enemies(DT)
+        face = e["face"]
+        p["x"] = e["x"] + 40 * face                            # jump past him: he keeps going
+        g.update_enemies(DT)
+        self.assertEqual(e["face"], face)
+
     def test_game_over_when_everyone_is_out(self):
         g, inp = self.to_level()
         p = g.players[0]

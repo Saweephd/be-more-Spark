@@ -123,24 +123,147 @@ class BlackWarriorTests(unittest.TestCase):
         self.assertEqual(g.p.state, "idle")
         self.assertLess(e.hp, e.max_hp)
 
-    def test_special_needs_meter_and_spends_it(self):
-        g, inp = self.to_fight()
-        e = self.lone_enemy(g, dx=-30)
-        g.p.meter = 1.5
-        self.frames(g, inp, 32, "a", "b")
-        self.assertAlmostEqual(g.p.meter, 0.5, delta=0.15)
-        self.frames(g, inp, 40)
-        self.assertLess(e.hp, e.max_hp)
+    def test_mixed_combos_pick_finishers(self):
+        for seq, move in ((("b", "b", "a"), "launch"), (("a", "a", "b"), "hammer"), (("b", "a", "b"), "claw"),
+                          (("a", "b", "a"), "tail")):
+            g, inp = self.to_fight()
+            e = self.lone_enemy(g, kind="security", dx=22)
+            e.hp = e.max_hp = 300
+            for k, btn in enumerate(seq):
+                self.frames(g, inp, 1, btn)
+                if k < 2:
+                    self.frames(g, inp, 24)
+            self.frames(g, inp, 3)
+            self.assertEqual(g.p.move, move, seq)
+            self.frames(g, inp, 30)
+            self.assertLess(e.hp, 300)
 
-    def test_full_meter_unleashes_nine_lives(self):
+    def test_dodge_pounce(self):
         g, inp = self.to_fight()
-        e = self.lone_enemy(g, dx=120)
+        e = self.lone_enemy(g, kind="security", dx=70)
+        e.hp = e.max_hp = 300
+        g.start_dodge(1)
+        self.frames(g, inp, 3)
+        self.frames(g, inp, 1, "b")
+        self.frames(g, inp, 3)
+        self.assertEqual(g.p.move, "pounce")
+        self.frames(g, inp, 30)
+        self.assertLess(e.hp, 300)
+
+    def charge(self, g, inp, frames):
+        inp.down("a"); inp.down("b")
+        for _ in range(frames):
+            g.step(DT, inp)
+            g.render(self.canvas)
+            inp.end_frame()
+
+    def release(self, g, inp, frames=0):
+        inp.up("a"); inp.up("b")
+        self.frames(g, inp, frames)
+
+    def test_tap_both_still_jumps_and_empty_meter_never_charges(self):
+        g, inp = self.to_fight()
+        g.enemies = []
+        g.p.meter = 0.0
+        self.charge(g, inp, 60)
+        self.assertNotEqual(g.p.state, "charge")
+        self.release(g, inp, 2)
+        self.assertEqual(g.p.state, "jump")
+
+    def test_charge_climbs_one_stage_per_bar(self):
+        g, inp = self.to_fight()
+        g.enemies = []
+        g.p.meter = 2.4
+        self.charge(g, inp, int((bw.CHARGE_START + 0.05) * 60))
+        self.assertEqual((g.p.state, g.p.charge), ("charge", 1))
+        self.charge(g, inp, int(bw.CHARGE_STEP * 60))
+        self.assertEqual(g.p.charge, 2)
+        self.charge(g, inp, int(bw.CHARGE_STEP * 2 * 60))
+        self.assertEqual(g.p.charge, 2)                    # only two full bars
+        self.release(g, inp, 1)
+        self.assertEqual(g.p.state, "roar")
+        self.assertAlmostEqual(g.p.meter, 0.4, delta=0.01)
+
+    def test_getting_hit_breaks_the_charge(self):
+        g, inp = self.to_fight()
+        g.enemies = []
         g.p.meter = 3.0
-        self.frames(g, inp, 30, "a", "b")
-        self.assertEqual(g.p.state, "flurry")
-        self.frames(g, inp, 100)
-        self.assertEqual(g.p.meter, 0.0)
+        self.charge(g, inp, 30)
+        self.assertEqual(g.p.state, "charge")
+        g.hurt_player(5, g.p.x + 10)
+        self.assertEqual(g.p.state, "hit")
+        self.release(g, inp, 30)
+        self.assertEqual(g.p.meter, 3.0)
+
+    def test_sky_pound_leaps_off_screen_and_crashes_down(self):
+        g, inp = self.to_fight()
+        g.p.meter = 1.0
+        e = self.lone_enemy(g, dx=70)
+        far = bw.Enemy("valet", g.p.x - 150, g.p.y)
+        far.cool = 99
+        g.enemies.append(far)
+        self.charge(g, inp, 24)
+        self.release(g, inp, 1)
+        self.assertEqual(g.p.state, "skypound")
+        top = 0
+        for _ in range(int(bw.SKY["hit"] * 60)):
+            self.frames(g, inp, 1)
+            top = max(top, g.p.z)
+        self.assertGreater(top - 30, g.p.y)                # gone off the top of the screen
+        self.frames(g, inp, 30)
+        self.assertLess(abs(g.p.x - e.x), 100)              # came down on the nearest goon
         self.assertLess(e.hp, e.max_hp)
+        self.assertEqual(far.hp, far.max_hp)
+        self.assertEqual(g.p.meter, 0.0)
+        self.frames(g, inp, 30)
+        self.assertEqual(g.p.state, "idle")
+
+    def test_blue_roar_ripples_out_and_hits_both_sides(self):
+        g, inp = self.to_fight()
+        g.p.meter = 2.0
+        left = self.lone_enemy(g, dx=-90)
+        right = bw.Enemy("security", g.p.x + 120, g.p.y + 8)
+        right.cool = 99
+        g.enemies.append(right)
+        self.charge(g, inp, int((bw.CHARGE_START + bw.CHARGE_STEP + 0.1) * 60))
+        self.release(g, inp, 1)
+        self.assertEqual(g.p.state, "roar")
+        self.frames(g, inp, int(bw.ROAR["blast"] * 60) + 4)
+        self.assertEqual(right.hp, right.max_hp)            # the ring hasn't reached him yet
+        self.frames(g, inp, 50)
+        self.assertLess(left.hp, left.max_hp)
+        self.assertLess(right.hp, right.max_hp)
+        self.assertIn(right.state, ("fly", "down", "getup"))
+
+    def test_crimson_cyclone_spins_and_hits_many_times(self):
+        g, inp = self.to_fight()
+        g.p.meter = 3.0
+        e = self.lone_enemy(g, kind="security", dx=60)
+        e.hp = e.max_hp = 200
+        self.charge(g, inp, int((bw.CHARGE_START + 2 * bw.CHARGE_STEP + 0.1) * 60))
+        self.release(g, inp, 1)
+        self.assertEqual(g.p.state, "cyclone")
+        x0 = g.p.x
+        self.frames(g, inp, int(bw.CYC["end"] * 60) + 6)
+        self.assertGreater(g.p.x, x0 + 40)                  # it travels
+        self.assertLessEqual(e.hp, 200 - 6 * 4)             # several hits
+        self.assertEqual(g.p.meter, 0.0)
+        self.assertEqual(g.p.state, "idle")
+
+    def test_specials_hurt_a_boss(self):
+        g, inp = self.to_fight()
+        g.enemies = []
+        g.phase = "boss"
+        g.boss = bw_bosses.make("pig")
+        g.boss.x, g.boss.y = g.p.x + 60, g.p.y
+        g.boss.state = "idle"
+        hp = g.boss.hp
+        g.p.meter = 2.0
+        g.p.state, g.p.charge = "charge", 2
+        g.fire_special(2)
+        for _ in range(60):
+            g.update_hero(DT, inp)
+        self.assertLess(g.boss.hp, hp)
 
     def test_dodge_slides_and_is_invulnerable(self):
         g, inp = self.to_fight()

@@ -89,6 +89,31 @@ def rest(dur):
 
 
 # ---------- effects ----------
+def _growl(dur, base):
+    """A raspy roar: detuned low squares, amplitude-chopped like a throat, over breath noise."""
+    np = _np()
+    n = int(dur * RATE)
+    t = np.arange(n, dtype=np.float32) / RATE
+    w = mix(tone(base, dur, "square", 0.3, 0.28, slide=base * 0.62, vibrato=9),
+            tone(base * 1.49, dur, "square", 0.45, 0.16, slide=base * 0.9, vibrato=11),
+            tone(base * 0.5, dur, "triangle", vol=0.35, slide=base * 0.35),
+            tone(900, dur, "noise", vol=0.22, decay=dur * 0.7))
+    rasp = (0.65 + 0.35 * np.sign(np.sin(2 * math.pi * 38 * t))).astype(np.float32)
+    swell = np.minimum(1.0, t / 0.08) * np.minimum(1.0, (dur - t) / 0.35)
+    return (w * rasp * swell).astype(np.float32)
+
+
+def _hum(dur, freq):
+    """The Ninth Dominion blade humming so hard it buzzes."""
+    np = _np()
+    n = int(dur * RATE)
+    t = np.arange(n, dtype=np.float32) / RATE
+    w = mix(tone(freq, dur, "square", 0.5, 0.14), tone(freq * 1.01, dur, "square", 0.25, 0.1),
+            tone(5000, dur, "noise", vol=0.12, decay=dur * 0.5))
+    trem = (0.6 + 0.4 * np.sin(2 * math.pi * 30 * t)).astype(np.float32)
+    return w * trem * _env(n, release=dur * 0.4)
+
+
 def _effects():
     sq, tri, nz = "square", "triangle", "noise"
     return {
@@ -152,6 +177,21 @@ def _effects():
         "rift":     lambda: mix(tone(80, 1.2, sq, 0.5, 0.22, slide=160, vibrato=6), tone(4000, 1.0, nz, vol=0.08, decay=0.8)),
         "slash":    lambda: chain(tone(6000, 0.18, nz, vol=0.3, decay=0.08), tone(1800, 0.3, tri, vol=0.4, slide=3600, decay=0.2)),
         "ding":     lambda: chain(tone(1568, 0.12, tri, vol=0.4, decay=0.1), tone(1319, 0.3, tri, vol=0.4, decay=0.25)),
+        "charge1":  lambda: mix(tone(220, 0.35, "square", 0.25, 0.16, slide=440), tone(3000, 0.3, "noise", vol=0.06, decay=0.2)),
+        "charge2":  lambda: mix(tone(330, 0.35, "square", 0.25, 0.18, slide=660, vibrato=14),
+                                tone(4000, 0.3, "noise", vol=0.08, decay=0.2)),
+        "charge3":  lambda: mix(tone(440, 0.4, "square", 0.25, 0.2, slide=990, vibrato=18),
+                                tone(220, 0.4, "square", 0.5, 0.12, slide=110), tone(5000, 0.35, "noise", vol=0.1, decay=0.25)),
+        "liftoff":  lambda: mix(tone(200, 0.45, "square", 0.25, 0.2, slide=1600), tone(1500, 0.45, "noise", vol=0.2, decay=0.3)),
+        "dive":     lambda: tone(2200, 0.4, "square", 0.125, 0.16, slide=300, vibrato=8),
+        "quake":    lambda: mix(tone(70, 0.9, "triangle", vol=0.55, slide=30), tone(45, 0.9, "square", 0.5, 0.14, slide=25),
+                                tone(500, 0.8, "noise", vol=0.3, decay=0.35), tone(2400, 0.2, "noise", vol=0.15, decay=0.05)),
+        "gather":   lambda: mix(tone(150, 0.4, "square", 0.5, 0.14, slide=600, vibrato=20),
+                                tone(6000, 0.4, "noise", vol=0.06)),
+        "roar":     lambda: _growl(0.95, 150),
+        "discharge": lambda: mix(tone(3200, 0.6, "noise", vol=0.22, decay=0.25), tone(1800, 0.5, "square", 0.25, 0.12,
+                                                                                     slide=90, vibrato=40)),
+        "kspin":    lambda: chain(_hum(0.1, 180), tone(4500, 0.04, "noise", vol=0.18, decay=0.02)),
         "special":  lambda: chain(*[tone(note_freq(n), 0.04, sq, 0.25, 0.26) for n in ("E5", "B5", "E6", "G#6", "B6", "E7")]),
         "orders":   lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.25) for n, d in (("G4", 0.12), ("C5", 0.12), ("E5", 0.12), ("G5", 0.36))]),
         "over":     lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in (("G4", 0.16), ("E4", 0.16), ("C4", 0.16), ("G3", 0.45))]),
@@ -209,13 +249,13 @@ TUNES = {
                  + "F3+C4:1 R:1 F3+C4:1 F3+C4:1 R:1 F3+C4:1 F3+C4:2 E3+B3:1 R:1 E3+B3:1 E3+B3:1 R:1 E3+B3:1 E3+B3:2",
         "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 H:1 " * 8,
     }),
-    # Scary Babies: a music-box lullaby in E minor, gone a little wrong.
-    "scary_babies": (126, 2, {
-        "lead": "E5:2 G5:1 F#5:1 E5:2 B4:4 R:2 C5:2 E5:1 D5:1 C5:2 B4:4 R:2 A4:2 C5:1 B4:1 A4:2 G4:2 B4:2 E5:2 "
-                "D#5:2 F#5:2 A5:2 G5:4 F#5:2",
-        "bass": "E3:2 B3:2 B3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 B3:2 B3:2 A2:2 E3:2 E3:2 E3:2 G3:2 G3:2 "
-                "B2:2 F#3:2 F#3:2 E3:2 B3:2 E3:2",
-        "drum": "K:2 H:2 H:2 " * 8,
+    # Scary Babies: a wind-up music box in E Phrygian that slips off key, over a low drone,
+    # a heartbeat and a ticking clock. The echo voice answers the box a beat and a half late.
+    "scary_babies": (96, 2, {
+        "box": "E6:2 B5:2 G6:2 B5:2 F6:2 B5:2 E6:4 E6:2 B5:2 G6:2 Bb6:2 A6:2 G6:2 F#6:4 C6:2 G5:2 Eb6:2 G5:2 D6:2 Bb5:2 C#6:4 B5:2 Bb5:2 A5:2 Ab5:2 G5:3 F5:1 E5:4",
+        "echo": "R:3 E6:2 B5:2 G6:2 B5:2 F6:2 B5:2 E6:4 E6:2 B5:2 G6:2 Bb6:2 A6:2 G6:2 F#6:4 C6:2 G5:2 Eb6:2 G5:2 D6:2 Bb5:2 C#6:4 B5:2 Bb5:2 A5:2 Ab5:2 G5:3 F5:1 E5:1",
+        "drone": "E2+B2:16 E2+B2:16 C2+G2:16 B1+F2:16",
+        "drum": "K:1 K:1 R:2 H:2 H:2 " * 8,
     }),
     # Soldiers vs Spies: a military march in D minor with snare rolls.
     "soldiers": (144, 2, {
@@ -285,6 +325,20 @@ def render_tune(name):
                 notes = n.split("+")
                 pieces.append(mix(*[tone(note_freq(x), dur * 0.8, "square", 0.5, 0.075, decay=0.14) for x in notes]))
                 pieces.append(rest(dur * 0.2))
+            elif part in ("box", "echo"):
+                vol = 0.2 if part == "box" else 0.07
+                f = note_freq(n)
+                pieces.append(mix(tone(f, dur * 0.95, "sine", vol=vol, decay=0.32),
+                                  tone(f * 1.007, dur * 0.95, "triangle", vol=vol * 0.3, decay=0.2)))
+                pieces.append(rest(dur * 0.05))
+            elif part == "drone":
+                notes = [note_freq(x) for x in n.split("+")]
+                w = mix(*[tone(f, dur, "sine", vol=0.13, vibrato=0.7) for f in notes],
+                        tone(notes[0] * 2.003, dur, "triangle", vol=0.03, vibrato=0.4))
+                fade = min(len(w) // 3, int(0.8 * RATE))
+                w[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
+                w[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
+                pieces.append(w)
             elif part == "rbass":
                 pieces.append(tone(note_freq(n), dur * 0.85, "square", 0.5, 0.16, decay=0.25))
                 pieces.append(rest(dur * 0.15))

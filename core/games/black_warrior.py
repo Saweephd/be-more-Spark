@@ -10,8 +10,14 @@ the Ninth Dominion, and each win changes the city.
     D-pad              walk anywhere on the street; tap left or right twice to dodge
     Triangle (B)       punch combo; pick up a weapon, swing it
     Big circle (A)     kick combo; throw a held weapon or a grabbed enemy
-    A and B together   jump (then A flying kick, B diving elbow); hold for a special
+    A and B together   jump (then A flying kick, B diving elbow)
+    Hold A and B       charge a special, one stage per full meter bar; let go to fire:
+                         1 bar  Sky Pound: leap off the top of the screen, crash down fist first
+                         2 bars Blue Roar: a roar and a blue discharge rippling out from Quick
+                         3 bars Crimson Cyclone: a humming red katana spin through the crowd
     B behind you       back elbow (hold away from the enemy)
+    Mixed combos       B B A rising knee, A A B hammer fist, B A B cat claw, A B A tail sweep;
+                       B during a dodge pounces
     Walk into a dazed enemy to grab: B knees, A throws
     Hold B one second while a guest is here: their team attack
     Small circle       pause; skips a cutscene you have already seen
@@ -26,6 +32,7 @@ import pygame
 from . import bw_art as art
 from . import bw_bosses as bosses
 from . import bw_cast as cast
+from . import bw_fx as fx
 from . import bw_guests as guests
 from . import bw_stages as stages
 from . import common as c
@@ -50,10 +57,30 @@ MOVES = {
     "backel": (0.26, 0.06, 0.15, 24, 10, True, "punch", "backel"),
     "knee": (0.22, 0.06, 0.12, 22, 7, False, "punch", "knee"),
     "swing": (0.30, 0.08, 0.18, 40, 14, True, "bonk", "swing"),
+    # mixed-button finishers
+    "launch": (0.34, 0.07, 0.17, 26, 12, True, "kick", "knee"),
+    "hammer": (0.38, 0.14, 0.24, 26, 14, True, "thud", "elbow"),
+    "claw": (0.32, 0.05, 0.24, 28, 7, False, "punch", "cross"),
+    "tail": (0.40, 0.10, 0.26, 34, 11, True, "kick", "round"),
+    "pounce": (0.32, 0.04, 0.20, 32, 12, True, "punch", "jab"),
 }
+# Mix punches (B) and kicks (A) for a finisher: the last three presses pick it.
+MIXES = {
+    ("b", "b", "a"): ("launch", "RISING KNEE"),
+    ("a", "a", "b"): ("hammer", "HAMMER FIST"),
+    ("b", "a", "b"): ("claw", "CAT CLAW"),
+    ("a", "b", "a"): ("tail", "TAIL SWEEP"),
+}
+MIX_GAP = 0.6             # most time allowed between presses in a mix
 B_COMBO = ("jab", "cross", "upper")
 A_COMBO = ("kick", "round", "spin")
 CUT_PHASES = ("katana", "reform", "ending")
+SPECIALS = ("special", "flurry", "charge", "skypound", "roar", "cyclone")
+CHARGE_START = 0.3        # hold A+B this long to start charging (a quick tap is a jump)
+CHARGE_STEP = 0.6         # each further stage takes this long
+SKY = {"crouch": 0.14, "up": 0.46, "hang": 0.74, "hit": 0.9, "end": 1.25, "top": 230.0}
+ROAR = {"blast": 0.38, "speed": 330.0, "reach": 210.0, "end": 1.4}
+CYC = {"spin": 0.32, "stop": 1.62, "end": 1.95, "tick": 0.13, "reach": 48}
 PLAY_PHASES = ("walk", "fight", "ride", "boss", "mask_off")
 
 
@@ -110,6 +137,10 @@ class Quick(Fighter):
         self.held = None
         self.knees = 0
         self.recent = []
+        self.seq, self.seq_t = [], -9.0
+        self.charge = 0
+        self.target = None
+        self.tick = 0.0
 
 
 class BlackWarrior(Game):
@@ -139,6 +170,7 @@ class BlackWarrior(Game):
         self.win = False
         self.p = Quick(60, 196)
         self.enemies, self.projs, self.fx, self.weapons, self.bubbles = [], [], [], [], []
+        self.vfx, self.chips, self.shake = [], [], 0.0
         self.boss = None
         self.guest = None
         self.token = None
@@ -179,6 +211,7 @@ class BlackWarrior(Game):
         self.cam, self.prog, self.doors = 0.0, 0.0, 0.0
         self.stop_i, self.stop_spawned, self.belt = 0, False, 1
         self.debris = []
+        self.vfx, self.chips = [], []
         self.zone = None
         self.token = None
         self.crate = None
@@ -223,6 +256,16 @@ class BlackWarrior(Game):
         for f in self.fx:
             f[3] -= dt
         self.fx = [f for f in self.fx if f[3] > 0]
+        self.shake = max(0.0, self.shake - dt)
+        for v in self.vfx:
+            v["t"] += dt
+        self.vfx = [v for v in self.vfx if v["t"] < v["life"]]
+        for d in self.chips:
+            d[0] += d[3] * dt
+            d[2] += d[4] * dt
+            d[4] -= GRAV * dt
+            d[5] += dt * 12
+        self.chips = [d for d in self.chips if d[2] > -2]
         for b in self.bubbles:
             b[2] -= dt
         self.bubbles = [b for b in self.bubbles if b[2] > 0]
@@ -435,7 +478,7 @@ class BlackWarrior(Game):
         if not b.take(dmg, from_air):
             return False
         self.score += dmg * 10
-        if self.p.state not in ("special", "flurry"):
+        if self.p.state not in SPECIALS:
             self.p.meter = min(3.0, self.p.meter + 0.05)
         self.fx.append(["spark", sx, sy, 0.15, True])
         return True
@@ -578,11 +621,11 @@ class BlackWarrior(Game):
         if self.chord is not None:
             if "a" in held and "b" in held:
                 self.chord += dt
-                if self.chord >= 0.45 and p.meter >= 1.0 and self.can_act():
-                    self.start_special()
+                if self.chord >= CHARGE_START and p.meter >= 1.0 and self.can_act():
+                    self.start_charge()
                     self.chord = None
             else:
-                if self.chord < 0.45 or p.meter < 1.0:
+                if self.chord < CHARGE_START or p.meter < 1.0:
                     self.start_jump(inp)
                 self.chord = None
             return
@@ -617,6 +660,10 @@ class BlackWarrior(Game):
                 p.air = "kick" if btn == "a" else "elbow"
                 self.sfx("whiff")
             return
+        if p.state == "dodge" and btn == "b" and p.weapon is None:
+            self.start_move("pounce")
+            self.combo_name("POUNCE")
+            return
         if p.state == "grab":
             if btn == "b":
                 self.start_move("knee")
@@ -638,11 +685,27 @@ class BlackWarrior(Game):
         elif p.weapon is not None:
             self.throw_weapon()
             return
+        if self.time - p.seq_t > MIX_GAP:
+            p.seq = []
+        p.seq = (p.seq + [btn])[-3:]
+        p.seq_t = self.time
+        mix = MIXES.get(tuple(p.seq))
+        if mix:
+            p.seq = []
+            p.combo = {"a": 0, "b": 0}
+            self.start_move(mix[0])
+            self.combo_name(mix[1])
+            return
         combo = B_COMBO if btn == "b" else A_COMBO
         if p.combo_t > 0.6:
             p.combo[btn] = 0
         self.start_move(combo[p.combo[btn] % 3])
         p.combo[btn] = (p.combo[btn] + 1) % 3
+
+    def combo_name(self, name):
+        p = self.p
+        self.vfx.append({"kind": "name", "text": name, "x": p.x, "y": p.y - 66, "t": 0.0, "life": 0.7})
+        self.score += 50
 
     def start_move(self, name):
         p = self.p
@@ -670,18 +733,78 @@ class BlackWarrior(Game):
         p.inv = max(p.inv, 0.32)
         self.sfx("dash")
 
-    def start_special(self):
+    def start_charge(self):
         p = self.p
-        if p.meter >= 3.0:
-            p.state, p.st = "flurry", 0.0
-            p.meter = 0.0
-            p.inv = 1.8
+        p.state, p.st, p.charge = "charge", 0.0, 1
+        self.vfx.append({"kind": "burst", "x": p.x, "y": p.y, "t": 0.0, "life": 0.25, "lvl": 1})
+        self.sfx("charge1")
+
+    def charge_level(self):
+        p = self.p
+        return max(1, min(3, int(p.meter + 1e-6), 1 + int(p.st / CHARGE_STEP)))
+
+    def nearest_foe(self):
+        """Where Sky Pound should land: the closest standing enemy or the boss, if any."""
+        p = self.p
+        best = None
+        for e in self.enemies:
+            if e.alive and e.state not in ("fly", "down", "held") and self.lo() - 10 < e.x < self.hi() + 10:
+                d = abs(e.x - p.x) + abs(e.y - p.y)
+                if best is None or d < best[0]:
+                    best = (d, e.x, e.y)
+        b = self.boss
+        if b is not None and b.hp > 0 and self.phase in ("boss", "ride"):
+            d = abs(b.x - p.x) + abs(b.y - p.y)
+            if best is None or d < best[0]:
+                best = (d, b.x - p.face * 6, b.y)
+        if best is None:
+            return (p.x + p.face * 40, p.y)
+        return (best[1], best[2])
+
+    def fire_special(self, lvl):
+        p = self.p
+        p.meter = max(0.0, p.meter - lvl)
+        p.hit_ids, p.tick, p.charge = set(), 0.0, 0
+        state = {1: "skypound", 2: "roar", 3: "cyclone"}[lvl]
+        p.state, p.st = state, 0.0
+        p.inv = {1: SKY["end"], 2: ROAR["end"], 3: CYC["end"]}[lvl] + 0.3
+        self.score += 100 * lvl
+        if lvl == 1:
+            p.target = self.nearest_foe()
+            self.sfx("liftoff")
+        elif lvl == 2:
+            self.sfx("gather")
         else:
-            p.state, p.st = "special", 0.0
-            p.meter -= 1.0
-            p.inv = 0.7
-        p.hit_ids = set()
-        self.sfx("special")
+            self.sfx("rift")
+            self.bubble("Ninth Dominion, lend me your edge!", p.x, p.y - 70, 1.2)
+
+    def special_damage(self, dmg, knock, test, boss_dmg, sx=None, sy=None):
+        """Hit every enemy that test(e) picks, once each (tracked in hit_ids), and the boss if he is in range."""
+        p = self.p
+        hit = False
+        for e in self.enemies:
+            if not e.alive or e.id in p.hit_ids or e.state in ("fly", "held"):
+                continue
+            if test(e.x, e.y, e.z):
+                p.hit_ids.add(e.id)
+                self.damage_enemy(e, dmg, knock, 1 if e.x > p.x else -1, gain=False)
+                self.fx.append(["spark", e.x, e.y - 30 - e.z, 0.14, True])
+                hit = True
+        cr = self.crate
+        if cr is not None and -3 not in p.hit_ids and test(cr["x"], cr["y"], 0):
+            p.hit_ids.add(-3)
+            cr["hp"] = 0
+            self.crate = None
+            met = self.met_guests()
+            self.token = {"x": cr["x"], "y": cr["y"], "t": 0.0, "guest": met[self.rng.randrange(len(met))]}
+            self.fx.append(["spark", cr["x"], cr["y"] - 14, 0.3, True])
+        b = self.boss
+        if b is not None and b.hp > 0 and -2 not in p.hit_ids and self.phase in ("boss", "ride") and test(b.x, b.y, 0):
+            bx, by = b.body()
+            if self.boss_hit(boss_dmg, True, bx if sx is None else sx, by if sy is None else sy):
+                p.hit_ids.add(-2)
+                hit = True
+        return hit
 
     def enemy_behind(self):
         p = self.p
@@ -744,8 +867,17 @@ class BlackWarrior(Game):
                 self.try_grab()
         elif s == "atk":
             dur, a0, a1, reach, dmg, knock, snd, pose = MOVES[p.move]
+            if p.move == "pounce" and p.st < 0.16:
+                p.x += p.face * 170 * dt
+            if p.move == "claw" and p.st >= 0.15 and p.st - dt < 0.15:
+                p.hit_ids = set()                   # the second swipe can hit again
             if a0 <= p.st <= a1 and -1 not in p.hit_ids:
-                self.resolve_attack(reach, dmg, knock, snd, -p.face if p.move == "backel" else p.face)
+                if p.move == "tail":
+                    self.resolve_attack(reach, dmg, knock, snd, p.face, both=True)
+                elif p.move == "hammer":
+                    self.resolve_attack(reach, dmg, knock, snd, p.face, downed=True)
+                else:
+                    self.resolve_attack(reach, dmg, knock, snd, -p.face if p.move == "backel" else p.face)
             if p.st >= dur:
                 if p.move == "knee" and p.held is not None:
                     p.state, p.st = "grab", 0.0
@@ -784,23 +916,29 @@ class BlackWarrior(Game):
         elif s == "throw":
             if p.st > 0.3:
                 p.state = "idle"
-        elif s == "special":
+        elif s == "special":           # Pops' Bug Out spin
             if p.st > 0.12:
                 self.resolve_attack(42, 18, True, "kick", p.face, radius=True)
             if p.st > 0.6:
                 p.state = "idle"
-        elif s == "flurry":
-            for k, at in enumerate((0.3, 0.7, 1.1)):
-                if p.st >= at and p.st - dt < at:
-                    for e in self.enemies:
-                        if e.alive and e.state not in ("down", "fly") and self.lo() - 20 < e.x < self.hi() + 20:
-                            self.damage_enemy(e, 12, knock=(k == 2), d=1 if e.x > p.x else -1)
-                    if self.boss is not None:
-                        bx, by = self.boss.body()
-                        self.boss_hit(16, True, bx, by)
-                    self.sfx("punch")
-            if p.st > 1.6:
-                p.state = "idle"
+        elif s == "charge":
+            if self.phase not in PLAY_PHASES:
+                p.state, p.charge = "idle", 0
+            else:
+                lvl = self.charge_level()
+                if lvl > p.charge:
+                    p.charge = lvl
+                    self.vfx.append({"kind": "burst", "x": p.x, "y": p.y, "t": 0.0, "life": 0.3, "lvl": lvl})
+                    self.sfx("charge%d" % lvl)
+                    self.shake = max(self.shake, 0.08 * lvl)
+                if not ("a" in held and "b" in held):
+                    self.fire_special(p.charge)
+        elif s == "skypound":
+            self.update_skypound(dt)
+        elif s == "roar":
+            self.update_roar(dt)
+        elif s == "cyclone":
+            self.update_cyclone(dt)
         elif s == "hit":
             if p.st > 0.28:
                 p.state = "idle"
@@ -829,6 +967,90 @@ class BlackWarrior(Game):
                 p.inv = max(p.inv, 1.0)
         p.x = max(self.lo(), min(self.hi(), p.x))
         p.y = max(TOP, min(BOTTOM, p.y))
+
+    # ------------------------------------------------------------ charged specials
+    def update_skypound(self, dt):
+        p, t = self.p, self.p.st
+        tx, ty = p.target
+        if t < SKY["crouch"]:
+            p.z = 0.0
+        elif t < SKY["up"]:
+            k = (t - SKY["crouch"]) / (SKY["up"] - SKY["crouch"])
+            p.z = SKY["top"] * (1 - (1 - k) ** 2)
+        elif t < SKY["hang"]:
+            p.z = SKY["top"]
+            p.x += max(-320 * dt, min(320 * dt, tx - p.x))
+            p.y += max(-140 * dt, min(140 * dt, ty - p.y))
+            if t - dt < SKY["up"]:
+                self.sfx("dive")
+        elif t < SKY["hit"]:
+            k = (t - SKY["hang"]) / (SKY["hit"] - SKY["hang"])
+            p.z = SKY["top"] * (1 - k * k)
+        else:
+            p.z = 0.0
+            if t - dt < SKY["hit"]:
+                self.sky_impact()
+            if t >= SKY["end"]:
+                p.state, p.st = "idle", 0.0
+
+    def sky_impact(self):
+        p = self.p
+        self.sfx("quake")
+        self.shake = 0.5
+        self.vfx.append({"kind": "quake", "x": p.x, "y": p.y, "t": 0.0, "life": 0.75, "seed": int(p.x)})
+        self.vfx.append({"kind": "flash", "col": (255, 236, 170), "t": 0.0, "life": 0.18})
+        for k in range(14):
+            a = self.rng.uniform(0.15, math.pi - 0.15)
+            self.chips.append([p.x + self.rng.uniform(-10, 10), p.y + self.rng.uniform(-4, 4), 2.0,
+                                math.cos(a) * self.rng.uniform(40, 130), math.sin(a) * self.rng.uniform(140, 260),
+                                self.rng.uniform(0, 6)])
+        self.special_damage(24, True, lambda x, y, z: abs(x - p.x) <= 78 and abs(y - p.y) <= 28 + (12 if z > 20 else 0),
+                            26, p.x, p.y - 30)
+        self.bubble("SKY POUND!", p.x, p.y - 74, 0.9)
+
+    def update_roar(self, dt):
+        p, t = self.p, self.p.st
+        if t >= ROAR["blast"]:
+            if t - dt < ROAR["blast"]:
+                self.sfx("roar")
+                self.sfx("discharge")
+                self.shake = 0.4
+                self.vfx.append({"kind": "flash", "col": (110, 190, 255), "t": 0.0, "life": 0.25})
+                self.bubble("RAAAWR!", p.x, p.y - 74, 1.0)
+            r = min(ROAR["reach"], (t - ROAR["blast"]) * ROAR["speed"])
+            p.ring = r
+            self.special_damage(20, True, lambda x, y, z: math.hypot(x - p.x, (y - p.y) * 2.2) <= r, 24)
+            for pr in self.projs:                     # the blast swats enemy fire out of the air
+                if pr["owner"] == "enemy" and math.hypot(pr["x"] - p.x, (pr["y"] - p.y) * 2.2) <= r:
+                    pr["dead"] = True
+                    self.fx.append(["spark", pr["x"], pr["y"] - pr["z"], 0.1, False])
+        if t >= ROAR["end"]:
+            p.state, p.st = "idle", 0.0
+
+    def update_cyclone(self, dt):
+        p, t = self.p, self.p.st
+        if CYC["spin"] <= t < CYC["stop"]:
+            p.x += p.face * 74 * dt
+            foes = [e for e in self.enemies if e.alive and e.state not in ("fly", "down", "held")]
+            if foes:
+                e = min(foes, key=lambda e: abs(e.x - p.x))
+                p.y += max(-40 * dt, min(40 * dt, e.y - p.y))
+            p.tick -= dt
+            if p.tick <= 0:
+                p.tick = CYC["tick"]
+                p.hit_ids = set()
+                last = t > CYC["stop"] - CYC["tick"] * 1.5
+                reach = CYC["reach"]
+                if self.special_damage(6 if not last else 10, last,
+                                       lambda x, y, z: abs(x - p.x) <= reach and abs(y - p.y) <= 18 + (14 if z > 20 else 0), 7):
+                    self.sfx("slash")
+                else:
+                    self.sfx("kspin")
+        if t >= CYC["stop"] and t - dt < CYC["stop"]:
+            self.sfx("slash")
+            self.shake = 0.25
+        if t >= CYC["end"]:
+            p.state, p.st = "idle", 0.0
 
     def try_grab(self):
         p = self.p
@@ -897,7 +1119,7 @@ class BlackWarrior(Game):
         e.hp -= dmg
         e.flash = 0.08
         self.score += dmg * 10
-        if gain and self.p.state not in ("special", "flurry"):
+        if gain and self.p.state not in SPECIALS:
             self.p.meter = min(3.0, self.p.meter + 0.07)
         e.recent = [t for t in e.recent if self.time - t < 1.2] + [self.time]
         e.attacking = False
@@ -1191,6 +1413,10 @@ class BlackWarrior(Game):
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, int(255 * min(1.0, self.fade / 0.6))))
             surf.blit(shade, (0, 0))
+        if self.shake > 0 and self.phase in PLAY_PHASES:
+            amp = int(1 + 6 * min(1.0, self.shake / 0.5))
+            k = int(self.time * 60)
+            surf.scroll((k * 7) % (2 * amp + 1) - amp, ((k * 13) % (2 * amp + 1) - amp) // 2)
 
     def draw_select(self, surf):
         art.street(surf, 400 + self.pt * 10, self.time)
@@ -1227,6 +1453,10 @@ class BlackWarrior(Game):
             pose = "walk%d" % (int(p.anim * 8) % 4)
         elif s == "atk":
             pose = MOVES[p.move][7] if p.move else "idle0"
+            if p.move == "claw" and p.st >= 0.15:
+                pose = "jab"
+            elif p.move == "tail" and 0.1 < p.st < 0.26:
+                return art.hero("round", p.masked, -p.face if int(p.st * 20) % 2 else p.face)
         elif s == "jump":
             pose = {"kick": "jumpk", "elbow": "elbow"}.get(p.air, "tuck")
         elif s == "hit":
@@ -1243,16 +1473,47 @@ class BlackWarrior(Game):
             pose = "dodge"
         elif s == "special":
             return art.hero("spin", p.masked, 1 if int(p.st * 14) % 2 == 0 else -1)
-        elif s == "flurry":
-            pose = ("jab", "cross", "kick", "round", "upper", "spin")[int(p.st * 12) % 6]
+        elif s == "charge":
+            pose = "charge"
+        elif s == "skypound":
+            t = p.st
+            if t < SKY["crouch"]:
+                pose = "charge"
+            elif t < SKY["hang"]:
+                pose = "sky"
+            elif t < SKY["hit"]:
+                key = ("dive", p.masked, p.face)
+                img = art._cache.get(key)
+                if img is None:
+                    img = art._cache[key] = pygame.transform.flip(art.hero("sky", p.masked, p.face), False, True)
+                return img
+            else:
+                pose = "pound"
+        elif s == "roar":
+            pose = "charge" if p.st < ROAR["blast"] else "roar"
+        elif s == "cyclone":
+            t = p.st
+            if t < CYC["spin"]:
+                pose = "draw"
+            elif t < CYC["stop"]:
+                return art.hero("spin", p.masked, 1 if int(t * 16) % 2 == 0 else -1)
+            else:
+                pose = "strike"
         return art.hero(pose, p.masked, p.face)
 
     def blit_fighter(self, surf, img, x, y, z, face):
+        if img.get_height() > 0 and self.p is not None and img is self._dive_img():
+            surf.blit(img, (int(x - img.get_width() / 2), int(y - z - 12)))
+            return
         if img.get_width() > 70:
             surf.blit(img, (int(x - img.get_width() / 2), int(y - z - img.get_height() + 4)))
             return
         ax = art.HX + 1 if face > 0 else img.get_width() - 2 - art.HX
         surf.blit(img, (int(x - ax), int(y - z - (art.FEET_Y + 1))))
+
+    def _dive_img(self):
+        p = self.p
+        return art._cache.get(("dive", p.masked, p.face))
 
     def enemy_sprite(self, e):
         s, st = e.state, e.style
@@ -1329,25 +1590,45 @@ class BlackWarrior(Game):
             elif kind == "boss":
                 o.draw(surf, self)
             else:
-                if p.inv > 0 and int(self.time * 16) % 2 and p.state not in ("special", "flurry", "dodge", "cut"):
+                if p.inv > 0 and int(self.time * 16) % 2 and p.state not in SPECIALS + ("dodge", "cut"):
                     continue
                 if p.state == "cut" and self.guest is not None and self.guest.kind == "uncle_t":
                     continue
-                art.shadow(surf, p.x - cam, p.y)
+                art.shadow(surf, p.x - cam, p.y, max(8, int(26 - p.z / 12)))
+                if p.state == "charge":
+                    fx.aura(surf, p.x - cam, p.y - p.z, p.charge, self.time, False)
+                if p.state == "skypound" and p.st >= SKY["up"] and p.st < SKY["hit"]:
+                    fx.target_mark(surf, p.x - cam, p.y, self.time)
+                if p.state == "skypound" and SKY["crouch"] <= p.st < SKY["up"]:
+                    fx.skybeam(surf, p.x - cam, p.y - p.z - 20, (p.st - SKY["crouch"]) / (SKY["up"] - SKY["crouch"]))
+                if p.state == "skypound" and SKY["hang"] <= p.st < SKY["hit"]:
+                    fx.skybeam(surf, p.x - cam, p.y - p.z, 0.3)
+                if p.state == "roar" and p.st < ROAR["blast"]:
+                    fx.gather(surf, p.x - cam, p.y, p.st / ROAR["blast"], self.time)
                 img = self.sprite_for(p)
                 if p.flash > 0:
                     img = art.white(img)
-                self.blit_fighter(surf, img, p.x - cam, p.y, p.z, p.face)
+                jit = 0
+                if p.state == "charge" or (p.state == "roar" and p.st >= ROAR["blast"] and p.st < ROAR["blast"] + 0.5):
+                    jit = (1 if int(self.time * 40) % 2 else -1) * (1 if p.state == "roar" else min(2, p.charge))
+                self.blit_fighter(surf, img, p.x - cam + jit, p.y, p.z, p.face)
+                if p.state == "charge":
+                    fx.aura(surf, p.x - cam, p.y - p.z, p.charge, self.time, True)
+                    art.say(surf, fx.NAMES[p.charge], (int(p.x - cam), int(p.y - 72)), 14, fx.LEVEL_COLS[p.charge][3])
+                if p.state == "cyclone":
+                    self.draw_cyclone(surf, p, cam)
                 if p.weapon is not None and p.state not in ("fly", "down"):
                     ang = 300 if p.state == "atk" and p.move == "swing" and p.st > 0.08 else 45
                     wimg = art.weapon_img(p.weapon["kind"], ang if p.face > 0 else 180 - ang)
                     surf.blit(wimg, (int(p.x - cam + p.face * 10 - wimg.get_width() / 2), int(p.y - p.z - 32)))
                 if p.state == "special":
                     pygame.draw.circle(surf, art.BLUE[2], (int(p.x - cam), int(p.y - 22)), 24 + int(p.st * 30) % 8, 2)
-                if p.state == "flurry" and int(p.st * 20) % 2:
-                    flash = pygame.Surface((W, H), pygame.SRCALPHA)
-                    flash.fill((120, 200, 255, 50))
-                    surf.blit(flash, (0, 0))
+                if p.state == "roar" and p.st >= ROAR["blast"]:
+                    r = min(ROAR["reach"], (p.st - ROAR["blast"]) * ROAR["speed"])
+                    k = (p.st - ROAR["blast"]) / (ROAR["end"] - ROAR["blast"])
+                    fx.roar_ring(surf, p.x - cam, p.y, r, k, self.time)
+                    if k < 0.6:
+                        fx.roar_ring(surf, p.x - cam, p.y, r * 0.55, min(1.0, k + 0.3), self.time + 1)
                 if self.scramble > 0:
                     art.say(surf, "?!", (int(p.x - cam), int(p.y - 70)), 16, (255, 120, 255))
         for pr in self.projs:
@@ -1386,6 +1667,19 @@ class BlackWarrior(Game):
             elif kind == "fence":
                 for k in range(8):
                     surf.fill((150, 154, 166), (int(x - cam + k * 5 + (0.5 - t) * 80), int(y - 30 - k * 3), 3, 2))
+        for v in self.vfx:
+            k = v["t"] / v["life"]
+            if v["kind"] == "burst":
+                fx.burst(surf, v["x"] - cam, v["y"], v["lvl"], k)
+            elif v["kind"] == "quake":
+                fx.quake(surf, v["x"] - cam, v["y"], k, v["seed"])
+            elif v["kind"] == "name":
+                art.say(surf, v["text"], (int(v["x"] - cam), int(v["y"] - 14 * k)), 16, (255, 220, 80))
+        for d in self.chips:
+            fx.debris(surf, d[0] - cam, d[1], d[2], d[5])
+        for v in self.vfx:
+            if v["kind"] == "flash":
+                fx.tint(surf, v["col"], 70 * (1 - v["t"] / v["life"]))
         for msg, (x, y), t in self.bubbles:
             art.bubble(surf, msg, x - cam, y)
 
@@ -1444,6 +1738,28 @@ class BlackWarrior(Game):
             img.blit(fig, (48 - fig.get_width() // 2, 6))
         art._cache[key] = img
         return img
+
+    def draw_cyclone(self, surf, p, cam):
+        t = p.st
+        hx, hy = p.x - cam, p.y - p.z - 26
+        if t < CYC["spin"]:                     # the rift opens and the blade slides out
+            k = t / CYC["spin"]
+            art.rift(surf, hx + p.face * 22, hy - 6, min(1.0, k * 1.6), self.time)
+            fx.crimson_katana(surf, (hx + p.face * 8, hy - 4), -math.pi / 2 - p.face * 0.6, 14 + 26 * k, self.time)
+            return
+        if t >= CYC["stop"]:                    # the finishing pose; the blade goes home
+            k = (t - CYC["stop"]) / (CYC["end"] - CYC["stop"])
+            fx.crimson_katana(surf, (hx + p.face * 10, hy + 2), p.face * 0.2 if p.face > 0 else math.pi - 0.2,
+                              40 * (1 - k), self.time)
+            art.rift(surf, hx + p.face * 50, hy, max(0.0, 1 - k * 1.5), self.time)
+            return
+        spin = (t - CYC["spin"]) * 26
+        for g in (3, 2, 1):                     # afterimages and the swoosh
+            fx.crimson_katana(surf, (hx + math.cos(spin - g * 0.35) * 8, hy + math.sin(spin - g * 0.35) * 4),
+                              spin - g * 0.35, 40, self.time, ghost=g)
+        fx.slash_arc(surf, hx, hy, spin - 1.4, spin, 46, 0.2)
+        fx.slash_arc(surf, hx, hy + 6, spin - 1.0 + math.pi, spin + math.pi, 38, 0.4)
+        fx.crimson_katana(surf, (hx + math.cos(spin) * 8, hy + math.sin(spin) * 4), spin, 40, self.time)
 
     def draw_hud(self, surf):
         p = self.p

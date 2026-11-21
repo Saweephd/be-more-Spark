@@ -9,7 +9,7 @@ On the road (scrolls upward):
 Dodge semi trucks, buses and cars. Cops chase from behind: make them crash into
 traffic or each other, or brake-check one that rams you from behind. Every crash
 earns a "That's what you get!" The further he gets, the madder he gets and the
-more cops join in. Three hits and he's done. Reach the mall to win.
+more cops join in. Four hits and he's done. Reach the mall to win.
 
 All art, sounds and music are original to this project.
 """
@@ -44,6 +44,16 @@ INTRO_LEN = 10.0
 
 
 # ---------- art made from shapes ----------
+TURBO_LEN, TURBO_COOL, TURBO_BOOST = 2.6, 5.5, 190
+MAX_HITS = 4
+LUNGE_AFTER = 1.1        # seconds a cop must sit lined up behind you before he rams
+
+
+def cop_speed(stage):
+    """A touch faster than Uncle T's top speed: they reel you in slowly flat out, fast at cruise, never in turbo."""
+    return 255 + 40 * stage
+
+
 def car_surface(body, dark, kind="car"):
     s = pygame.Surface((CAR_W, CAR_H), pygame.SRCALPHA)
     for x, y in ((0, 4), (14, 4), (0, 19), (14, 19)):
@@ -246,6 +256,7 @@ class UncleT(Game):
         self.taunt = 0.0
         self.taunt_cool = 0.0
         self.crashed = 0
+        self.shaken = 0
         self.banner = (STRETCHES[0], 2.5)
         self.stretch = 0
         self.cue = set()
@@ -340,9 +351,10 @@ class UncleT(Game):
             self.turbo -= dt
         self.turbo_cool = max(0.0, self.turbo_cool - dt)
         if "a" in inp.pressed and self.turbo_cool <= 0:
-            self.turbo, self.turbo_cool = 2.0, 7.0
+            self.turbo, self.turbo_cool = TURBO_LEN, TURBO_COOL
             self.sfx("turbo")
-        speed = self.speed + (130 if self.turbo > 0 else 0)
+            self.banner = ("TURBO!", 0.8)
+        speed = self.speed + (TURBO_BOOST if self.turbo > 0 else 0)
         steer = 150 if not inp.touch else 0
         if "left" in inp.held:
             self.px -= steer * dt
@@ -383,7 +395,7 @@ class UncleT(Game):
     def update_traffic(self, dt, speed, stage):
         self.spawn_t -= dt
         if self.spawn_t <= 0:
-            self.spawn_t = max(0.45, 1.3 - 0.22 * stage - 0.15 * self.progress) * self.rng.uniform(0.7, 1.3)
+            self.spawn_t = max(0.6, 1.55 - 0.22 * stage - 0.15 * self.progress) * self.rng.uniform(0.7, 1.3)
             weights = {"car": 5, "bus": 2 + (stage == 2) * 2, "semi": 2 + (stage == 1) * 3}
             kind = self.rng.choices(list(weights), list(weights.values()))[0]
             surf = {"car": lambda: self.rng.choice(self.traffic_cars), "bus": lambda: self.bus,
@@ -441,14 +453,15 @@ class UncleT(Game):
                 a["y"] + inset < b["y"] + b["h"] - inset and b["y"] + inset < a["y"] + a["h"] - inset)
 
     def update_cops(self, dt, speed, p, stage, inp):
-        max_cops = min(6, 1 + int(p * 6))
+        max_cops = min(5, 1 + int(p * 5))
         self.cop_t -= dt
         live = [cp for cp in self.cops if not cp["crash"]]
-        if self.cop_t <= 0 and len(live) < max_cops:
-            self.cop_t = max(1.5, 6.0 - 4.5 * p) * self.rng.uniform(0.7, 1.2)
+        if self.cop_t <= 0 and len(live) < max_cops and self.turbo <= 0:
+            self.cop_t = max(2.0, 6.5 - 4.5 * p) * self.rng.uniform(0.8, 1.25)
             lane = self.rng.choice(LANES)
             self.cops.append({"x": lane - CAR_W / 2, "y": H + 30, "w": CAR_W, "h": CAR_H, "crash": 0.0,
-                              "spin": 0.0, "back": 0.0, "smart": min(0.85, 0.2 + 0.2 * stage)})
+                              "spin": 0.0, "back": 0.0, "smart": min(0.8, 0.2 + 0.18 * stage),
+                              "v": cop_speed(stage) * self.rng.uniform(0.95, 1.05)})
             self.sfx("siren")
         smart_roll = self.rng.random()
         for cop in self.cops:
@@ -457,10 +470,19 @@ class UncleT(Game):
                 cop["spin"] += 540 * dt
                 cop["y"] += speed * 0.8 * dt
                 continue
-            target_y = PLAYER_Y + 8
+            # a cop has a real road speed: drive faster than him (turbo) and he falls behind
+            # cops trail a few car lengths back and only lunge after lining up behind you for a moment
+            cx0 = cop["x"] + CAR_W / 2
+            lined = abs(cx0 - (self.px + CAR_W / 2)) < 12 and self.invuln <= 0
+            cop["lock"] = cop.get("lock", 0.0) + dt if lined else max(0.0, cop.get("lock", 0.0) - 2 * dt)
+            target_y = PLAYER_Y + (8 if cop["lock"] > LUNGE_AFTER else 46)
             gap = cop["y"] - target_y
-            rel = max(-50, min(110, gap * 1.4)) - (60 if cop["back"] > 0 else 0)
-            cop["y"] -= rel * dt
+            close = cop["v"] - speed - (90 if cop["back"] > 0 else 0)
+            if close > 0:
+                close = min(close, 110.0, max(0.0, gap) * 2.5)
+            elif gap < 0 and cop["v"] >= speed:
+                close = gap * 2.0          # drifted too close: ease back to trailing distance
+            cop["y"] -= close * dt
             cop["back"] = max(0.0, cop["back"] - dt)
             cx = cop["x"] + CAR_W / 2
             want = self.px + CAR_W / 2
@@ -469,7 +491,7 @@ class UncleT(Game):
             if danger and smart_roll < cop["smart"] * dt * 8:
                 want = cx + (40 if cx < 200 else -40)
             if cop["back"] <= 0:
-                cop["x"] += max(-(70 + 12 * stage) * dt, min((70 + 12 * stage) * dt, want - cx))
+                cop["x"] += max(-(55 + 10 * stage) * dt, min((55 + 10 * stage) * dt, want - cx))
             if cop["x"] < ROAD_L - 2 or cop["x"] > ROAD_R - CAR_W + 2:
                 self.crash_cop(cop)
                 continue
@@ -491,9 +513,15 @@ class UncleT(Game):
                 if behind and "down" in inp.held:
                     self.crash_cop(cop)               # brake check!
                 elif self.invuln <= 0:
-                    cop["y"] += 34
-                    cop["back"] = 1.2
+                    cop["y"] += 60
+                    cop["back"] = 2.0
+                    cop["lock"] = 0.0
                     self.hit("cop")
+        for cop in self.cops:
+            if not cop["crash"] and cop["y"] >= H + 60:
+                self.shaken += 1
+                self.score += 150
+                self.banner = ("SHOOK HIM!", 1.0)
         self.cops = [cp for cp in self.cops if cp["y"] < H + 60 and not (cp["crash"] and cp["crash"] <= 0)]
 
     def crash_cop(self, cop, quiet=False):
@@ -512,11 +540,11 @@ class UncleT(Game):
 
     def hit(self, by):
         self.hits += 1
-        self.invuln = 1.5
-        self.speed = 90
+        self.invuln = 2.0
+        self.speed = 110
         self.sfx("crash" if by == "traffic" else "hurt")
         self.puffs.append([self.px + 8, PLAYER_Y + 6, 5.0, 1.0])
-        if self.hits >= 3:
+        if self.hits >= MAX_HITS:
             self.end_reason = "BUSTED!" if by == "cop" else "WRECKED!"
             self.game_over()
 
@@ -529,7 +557,7 @@ class UncleT(Game):
             cop["y"] += 160 * dt
             cop["spin"] += 360 * dt
         if self.phase_t > 6.0 or (self.phase_t > 2.5 and "a" in inp.pressed):
-            self.score += 5000 + 1000 * (3 - self.hits) + 100 * self.crashed
+            self.score += 5000 + 1000 * (MAX_HITS - self.hits) + 100 * self.crashed
             self.win = True
             self.end_reason = "He made it to the mall!"
             self.game_over()
@@ -553,13 +581,16 @@ class UncleT(Game):
         for cop in self.cops:
             img = self.cop_car.copy()
             if not cop["crash"]:
-                blue = int(self.time * 6) % 2
+                warn = cop.get("lock", 0.0) > LUNGE_AFTER * 0.45
+                blue = int(self.time * (16 if warn else 6)) % 2
                 pygame.draw.rect(img, (60, 110, 255) if blue else (240, 40, 40), (3, 13, 5, 2))
                 pygame.draw.rect(img, (240, 40, 40) if blue else (60, 110, 255), (8, 13, 5, 2))
             else:
                 img = pygame.transform.rotate(img, cop["spin"])
             r = img.get_rect(center=(int(cop["x"] + CAR_W / 2), int(cop["y"] + CAR_H / 2)))
             surf.blit(img, r)
+            if not cop["crash"] and cop.get("lock", 0.0) > LUNGE_AFTER * 0.45 and int(self.time * 10) % 2:
+                text(surf, "!", (r.centerx, r.top - 8), 16, (255, 220, 60), center=True)
         if self.phase != "arrive" or self.phase_t < 2.5:
             if self.invuln <= 0 or int(self.time * 12) % 2 == 0:
                 if self.turbo > 0:
@@ -650,9 +681,9 @@ class UncleT(Game):
         pygame.draw.rect(surf, (70, 70, 80), (120, 5, 160, 6))
         pygame.draw.rect(surf, (250, 200, 70), (120, 5, int(160 * self.progress), 6))
         text(surf, "MALL", (284, 1), 16, c.YELLOW)
-        for i in range(3):
+        for i in range(MAX_HITS):
             col = (220, 60, 60) if i >= self.hits else (70, 70, 80)
-            pygame.draw.rect(surf, col, (W - 50 + i * 14, 4, 10, 8), border_radius=2)
+            pygame.draw.rect(surf, col, (W - 14 - (MAX_HITS - i) * 14, 4, 10, 8), border_radius=2)
         live = len([cp for cp in self.cops if not cp["crash"]])
         if live:
             text(surf, "COPS %d" % live, (4, 20), 16, (120, 160, 255))
@@ -662,7 +693,7 @@ class UncleT(Game):
             pygame.draw.circle(surf, (230, 230, 230), (26, H - 42), 4)
         if self.turbo_cool > 0:
             pygame.draw.rect(surf, (70, 70, 80), (W - 70, H - 10, 64, 5))
-            pygame.draw.rect(surf, (255, 150, 40), (W - 70, H - 10, int(64 * (1 - self.turbo_cool / 7.0)), 5))
+            pygame.draw.rect(surf, (255, 150, 40), (W - 70, H - 10, int(64 * (1 - self.turbo_cool / TURBO_COOL)), 5))
         else:
             text(surf, "TURBO", (W - 52, H - 16), 14, (255, 170, 60))
 

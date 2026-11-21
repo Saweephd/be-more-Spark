@@ -62,7 +62,7 @@ class UncleTTests(unittest.TestCase):
         self.frames(game, inp, 30)
         self.frames(game, inp, 1, "a")
         self.assertEqual(game.phase, "drive")
-        game.hits = 2
+        game.hits = ut.MAX_HITS - 1
         game.hit("cop")
         self.assertEqual(game.state, "over")
         self.assertEqual(game.end_reason, "BUSTED!")
@@ -100,6 +100,19 @@ class UncleTTests(unittest.TestCase):
         self.frames(game, inp, 1, "a")
         self.assertLessEqual(game.turbo_cool, cool)
 
+    def test_turbo_outruns_the_cops(self):
+        game, inp = self.drive()
+        lane = game.px + ut.CAR_W / 2
+        game.cops.append({"x": game.px, "y": ut.H + 20, "w": ut.CAR_W, "h": ut.CAR_H, "crash": 0.0,
+                          "spin": 0.0, "back": 0.0, "smart": 0.0, "v": ut.cop_speed(0)})
+        game.cops[0]["x"] = lane - ut.CAR_W / 2 + 30   # beside, not behind, so he can't ram
+        self.frames(game, inp, 20)                      # at cruise the cop gains
+        self.assertLess(game.cops[0]["y"], ut.H + 20)
+        self.frames(game, inp, 1, "a")
+        self.frames(game, inp, int(ut.TURBO_LEN * 60) - 5, "up")
+        self.assertEqual(game.cops, [])                 # left behind
+        self.assertEqual(game.shaken, 1)
+
     def truck_ahead(self, game, kind="semi", lane=None):
         surf = game.semis[0] if kind == "semi" else game.traffic_cars[0]
         w, h = surf.get_size()
@@ -123,7 +136,7 @@ class UncleTTests(unittest.TestCase):
         self.assertNotEqual(v["shift"], 0)
 
     def cop(self, game, x, y):
-        cp = {"x": x, "y": y, "w": ut.CAR_W, "h": ut.CAR_H, "crash": 0.0, "spin": 0.0, "back": 0.0, "smart": 0.0}
+        cp = {"x": x, "y": y, "w": ut.CAR_W, "h": ut.CAR_H, "crash": 0.0, "spin": 0.0, "back": 0.0, "smart": 0.0, "v": ut.cop_speed(0)}
         game.cops.append(cp)
         return cp
 

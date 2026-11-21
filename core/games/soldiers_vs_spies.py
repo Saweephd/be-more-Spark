@@ -22,6 +22,7 @@ from . import soldiers_art as art
 from .common import H, W, Game
 
 GROUND = 206
+LAND_SAFE = 3.0          # seconds of safety after a parachute lands
 SEA_TOP = 216
 GRAV = 760.0
 
@@ -292,11 +293,12 @@ class Soldiers(Game):
         if move:
             p["face"] = move
         if p["chute"]:
-            p["x"] += move * 55 * dt
-            p["y"] += 60 * dt
+            p["x"] += move * 70 * dt
+            p["y"] += (170 if down else 95) * dt
             floor = self.floor_at(p["x"], p["y"] - 2, p)
             if p["y"] >= floor:
                 p["y"], p["chute"], p["on"] = floor, False, True
+                p["inv"] = max(p["inv"], LAND_SAFE)      # safe time starts when you touch down
         else:
             p["crouch"] = down and p["on"] and not move
             speed = 0 if p["crouch"] else 82
@@ -408,6 +410,16 @@ class Soldiers(Game):
         p["dead"] = 1.4
         self.boom(p["x"], p["y"] - 12)
         self.sfx("hurt")
+        self.breather(p["x"])
+
+    def breather(self, x):
+        """A fair restart: clear enemy fire, scatter runners near the drop zone, pause the next wave."""
+        self.ebullets = []
+        for e in self.enemies:
+            if e["kind"] == "runner" and abs(e["x"] - x) < 140:
+                e["hp"] = 0
+                self.boom(e["x"], e["y"] - 12)
+        self.wave_t = max(self.wave_t, 3.5)
 
     # ---------- enemies ----------
     def spawn_due(self, dt):
@@ -436,16 +448,19 @@ class Soldiers(Game):
         self.enemies.append({"kind": kind, "x": float(x), "y": float(y), "w": w, "h": h, "hp": HP[kind], "cool": 1.0 +
                              self.rng.random(), "t": self.rng.random() * 6, "base": float(y), "face": -1, "flash": 0.0})
 
-    def nearest_player(self, x):
+    def nearest_player(self, x, targetable=False):
         live = [p for p in self.players if not p["out"] and not p["dead"]]
+        if targetable:          # don't shoot at someone parachuting in or still in their safe time
+            live = [p for p in live if not p["chute"] and p["inv"] <= 0.4]
         return min(live, key=lambda p: abs(p["x"] - x)) if live else None
 
     def aim_shot(self, x, y, speed=None):
-        p = self.nearest_player(x)
+        p = self.nearest_player(x, targetable=True)
         if p is None:
             return
-        speed = speed or (110 + 10 * self.level)
-        tx, ty = p["x"], p["y"] - p["hero"]["height"] * 0.55
+        speed = speed or (100 + 8 * self.level)
+        tx = p["x"] + self.rng.uniform(-14, 14)
+        ty = p["y"] - p["hero"]["height"] * 0.55 + self.rng.uniform(-8, 8)
         d = math.hypot(tx - x, ty - y) or 1
         self.ebullets.append({"x": x, "y": y, "vx": (tx - x) / d * speed, "vy": (ty - y) / d * speed, "g": 0.0})
         self.sfx("eshot")
@@ -467,9 +482,9 @@ class Soldiers(Game):
             k = e["kind"]
             target = self.nearest_player(e["x"])
             if k == "runner":
-                if target:
-                    e["face"] = 1 if target["x"] > e["x"] else -1
-                e["x"] += e["face"] * (62 + 6 * self.level) * dt
+                if target and not e.get("set"):      # pick a direction once, then commit to it
+                    e["face"], e["set"] = (1 if target["x"] > e["x"] else -1), True
+                e["x"] += e["face"] * (58 + 5 * self.level) * dt
             elif k == "shooter":
                 if target:
                     e["face"] = 1 if target["x"] > e["x"] else -1
@@ -479,8 +494,9 @@ class Soldiers(Game):
             elif k == "drone":
                 e["x"] -= 48 * dt
                 e["y"] = e["base"] + math.sin(e["t"] * 2.2) * 14
-                if target and abs(target["x"] - e["x"]) < 12 and e["cool"] <= 0:
-                    e["cool"] = 1.4
+                aimed = self.nearest_player(e["x"], targetable=True)
+                if aimed and abs(aimed["x"] - e["x"]) < 12 and e["cool"] <= 0:
+                    e["cool"] = 1.6
                     self.ebullets.append({"x": e["x"], "y": e["y"] + 5, "vx": 0.0, "vy": 120.0, "g": 0.0})
             elif k in ("jeep", "sled"):
                 e["x"] -= (120 if k == "jeep" else 165) * dt
