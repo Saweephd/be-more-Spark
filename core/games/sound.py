@@ -117,6 +117,31 @@ def _hum(dur, freq):
 def _effects():
     sq, tri, nz = "square", "triangle", "noise"
     return {
+        # Alien Storm: Tom Cat Alley
+        "as_vulcan":  lambda: mix(tone(1900, 0.03, nz, vol=0.12, decay=0.012), tone(180, 0.03, sq, 0.3, 0.1, slide=90)),
+        "as_heat":    lambda: mix(tone(2600, 0.34, nz, vol=0.24, decay=0.16), tone(500, 0.3, sq, 0.25, 0.14, slide=1500)),
+        "as_radar":   lambda: mix(tone(1400, 0.6, nz, vol=0.26, decay=0.3), tone(240, 0.55, sq, 0.4, 0.16, slide=900)),
+        "as_lock":    lambda: chain(tone(1760, 0.035, sq, 0.5, 0.2), rest(0.02), tone(2093, 0.045, sq, 0.5, 0.2)),
+        "as_boom":    lambda: mix(tone(420, 0.3, nz, vol=0.34, decay=0.13), tone(130, 0.26, tri, vol=0.4, slide=50)),
+        "as_boom_big": lambda: mix(tone(260, 0.8, nz, vol=0.42, decay=0.34), tone(90, 0.7, tri, vol=0.5, slide=34),
+                                   chain(rest(0.12), tone(600, 0.5, nz, vol=0.2, decay=0.2))),
+        "as_hit":     lambda: mix(tone(900, 0.16, nz, vol=0.3, decay=0.06), tone(300, 0.2, sq, 0.5, 0.24, slide=90)),
+        "as_pickup":  lambda: chain(*[tone(note_freq(n), 0.05, sq, 0.25, 0.26) for n in ("G5", "B5", "D6", "G6")]),
+        "as_loop":    lambda: mix(tone(3000, 0.7, nz, vol=0.16, decay=0.5), tone(200, 0.7, tri, vol=0.3, slide=620)),
+        "as_warning": lambda: chain(tone(740, 0.2, sq, 0.5, 0.26), tone(554, 0.2, sq, 0.5, 0.26)),
+        "as_shot":    lambda: tone(700, 0.12, sq, 0.2, 0.16, slide=240),
+        "as_dive":    lambda: tone(900, 0.5, sq, 0.3, 0.2, slide=160, vibrato=20),
+        "as_launch":  lambda: tone(160, 0.3, sq, 0.3, 0.18, slide=520),
+        "as_thunder": lambda: mix(tone(140, 1.1, nz, vol=0.4, decay=0.5), tone(60, 0.9, tri, vol=0.4, slide=36),
+                                  tone(4000, 0.08, nz, vol=0.3, decay=0.03)),
+        "as_catapult": lambda: mix(tone(5000, 1.4, nz, vol=0.24, decay=0.9), tone(70, 1.3, tri, vol=0.36, slide=150),
+                                   tone(180, 0.1, sq, 0.5, 0.22, slide=60)),
+        "as_burner":  lambda: mix(tone(240, 1.6, nz, vol=0.3, decay=1.4), tone(55, 1.6, sq, 0.4, 0.14, slide=75, vibrato=14)),
+        "as_wire":    lambda: mix(tone(1200, 0.5, sq, 0.2, 0.16, slide=300, vibrato=30), tone(300, 0.4, nz, vol=0.3, decay=0.2),
+                                  tone(90, 0.3, tri, vol=0.4, slide=50)),
+        "as_splash":  lambda: tone(2200, 0.9, nz, vol=0.3, decay=0.4),
+        "as_broadside": lambda: mix(tone(180, 1.3, nz, vol=0.5, decay=0.5), tone(60, 1.2, tri, vol=0.55, slide=28),
+                                    tone(3000, 0.06, nz, vol=0.4, decay=0.02), chain(rest(0.35), tone(110, 0.9, nz, vol=0.2, decay=0.5))),
         "move":     lambda: tone(660, 0.035, sq, 0.25, 0.25),
         "select":   lambda: chain(tone(660, 0.05, sq, 0.25, 0.3), tone(990, 0.08, sq, 0.25, 0.3)),
         "back":     lambda: chain(tone(520, 0.05, sq, 0.25, 0.25), tone(390, 0.07, sq, 0.25, 0.25)),
@@ -209,6 +234,58 @@ def _effects():
 # Each tune: beats per minute, steps per beat, and parts written as "note:steps" tokens
 # ("R" is a rest). Every tune here was written for BMO's games.
 TUNES = {
+    # Alien Storm: Tom Cat Alley. The anthem: a slow, proud guitar line over synth chords and big drums. Original.
+    "as_anthem": (92, 2, {
+        "guitar": "R:4 E4:2 G#4:2 B4:6 A4:1 G#4:1 F#4:4 E4:2 F#4:2 G#4:8 R:2 E4:2 G#4:2 B4:2 C#5:6 B4:1 A4:1 G#4:4 F#4:2 G#4:2 E4:10 "
+                  "R:2 B4:2 C#5:2 E5:6 D#5:1 C#5:1 B4:4 G#4:2 B4:2 A4:8 R:2 A4:2 B4:2 C#5:2 B4:4 G#4:2 E4:2 F#4:4 D#4:4 E4:12",
+        "pad": "E3+G#3+B3:8 E3+G#3+B3:8 A2+C#3+E3:8 B2+D#3+F#3:8 E3+G#3+B3:8 C#3+E3+G#3:8 A2+C#3+E3:8 B2+D#3+F#3:8 "
+               "C#3+E3+G#3:8 G#2+B2+D#3:8 A2+C#3+E3:8 E3+G#3+B3:8 A2+C#3+E3:8 E3+G#3+B3:8 B2+D#3+F#3:8 E3+G#3+B3:8",
+        "bass": "E2:8 E2:8 A1:8 B1:8 E2:8 C#2:8 A1:8 B1:8 C#2:8 G#1:8 A1:8 E2:8 A1:8 E2:8 B1:8 E2:8",
+        "drum": ("B:2 H:2 N:2 H:2 B:1 B:1 H:2 N:2 H:2 " * 7) + "B:2 H:2 N:2 T:1 T:1 B:1 B:1 T:1 T:1 N:2 N:1 N:1 ",
+    }),
+    "as_fleet": (126, 2, {
+        "guitar": "E4:3 E4:1 G4:2 A4:2 B4:4 A4:2 G4:2 E4:3 E4:1 G4:2 B4:2 D5:4 B4:4 E5:3 E5:1 D5:2 B4:2 A4:4 G4:2 A4:2 B4:6 A4:2 G4:2 F#4:2 E4:4 ",
+        "rbass": "E2:1 E2:1 E3:1 E2:1 " * 8 + "C2:1 C2:1 C3:1 C2:1 " * 4 + "D2:1 D2:1 D3:1 D2:1 " * 4,
+        "pad": "E3+G3+B3:16 E3+G3+B3:16 C3+E3+G3:16 D3+F#3+A3:16",
+        "drum": "B:2 H:1 H:1 N:2 H:1 B:1 " * 8,
+    }),
+    "as_stage1": (150, 2, {
+        "lead": "E5:2 B4:1 E5:1 G5:2 F#5:1 E5:1 D5:2 A4:1 D5:1 F#5:2 E5:1 D5:1 C5:2 G4:1 C5:1 E5:2 D5:1 C5:1 B4:4 R:2 B4:1 D5:1 "
+                "E5:2 B4:1 E5:1 G5:2 A5:1 B5:1 A5:2 F#5:1 D5:1 A5:2 G5:1 F#5:1 G5:2 E5:1 C5:1 E5:2 F#5:1 G5:1 F#5:4 D#5:4",
+        "rbass": "E2:1 E2:1 E3:1 E2:1 " * 2 + "D2:1 D2:1 D3:1 D2:1 " * 2 + "C2:1 C2:1 C3:1 C2:1 " * 2 + "B1:1 B1:1 B2:1 B1:1 " * 2
+                 + "E2:1 E2:1 E3:1 E2:1 " * 2 + "D2:1 D2:1 D3:1 D2:1 " * 2 + "C2:1 C2:1 C3:1 C2:1 " * 2 + "B1:1 B1:1 B2:1 B1:1 " * 2,
+        "chord": "R:2 E4+G4:1 R:1 " * 4 + "R:2 D4+F#4:1 R:1 " * 4 + "R:2 C4+E4:1 R:1 " * 4 + "R:2 B3+D#4:1 R:1 " * 4,
+        "drum": "B:1 H:1 N:1 H:1 B:1 B:1 N:1 H:1 " * 8,
+    }),
+    "as_stage2": (140, 2, {
+        "lead": "A4:2 C5:2 E5:3 D5:1 C5:2 B4:2 A4:4 G4:2 B4:2 D5:3 C5:1 B4:2 A4:2 G#4:4 "
+                "A4:2 C5:2 E5:2 A5:2 G5:3 E5:1 D5:2 C5:2 B4:2 C5:2 D5:2 E5:2 E5:8",
+        "rbass": "A1:1 A2:1 A1:1 A2:1 " * 4 + "G1:1 G2:1 G1:1 G2:1 " * 2 + "E1:1 E2:1 E1:1 E2:1 " * 2
+                 + "A1:1 A2:1 A1:1 A2:1 " * 2 + "F1:1 F2:1 F1:1 F2:1 " * 2 + "G1:1 G2:1 G1:1 G2:1 " * 2 + "E1:1 E2:1 E1:1 E2:1 " * 2,
+        "pad": "A3+C4+E4:16 G3+B3+D4:8 E3+G#3+B3:8 A3+C4+E4:8 F3+A3+C4:8 G3+B3+D4:8 E3+G#3+B3:8",
+        "drum": "B:2 H:1 H:1 N:2 H:1 T:1 " * 8,
+    }),
+    "as_stage3": (158, 2, {
+        "lead": "D5:1 F#5:1 A5:2 F#5:1 D5:1 A4:2 B4:1 D5:1 G5:2 D5:1 B4:1 G4:2 A4:1 C#5:1 E5:2 C#5:1 A4:1 E5:2 F#5:2 E5:2 D5:4 "
+                "D5:1 F#5:1 A5:2 B5:2 A5:2 G5:1 F#5:1 E5:2 D5:2 B4:2 C#5:2 E5:2 A5:2 G5:1 E5:1 D5:6 R:2",
+        "rbass": "D2:1 D2:1 A2:1 D2:1 " * 2 + "G1:1 G1:1 D2:1 G1:1 " * 2 + "A1:1 A1:1 E2:1 A1:1 " * 2 + "D2:1 D2:1 A2:1 D2:1 " * 2
+                 + "D2:1 D2:1 A2:1 D2:1 " * 2 + "G1:1 G1:1 D2:1 G1:1 " * 2 + "A1:1 A1:1 E2:1 A1:1 " * 2 + "D2:1 D2:1 A2:1 D2:1 " * 2,
+        "chord": "R:1 D4+F#4:1 R:1 D4+F#4:1 " * 4 + "R:1 G3+B3:1 R:1 G3+B3:1 " * 4 + "R:1 A3+C#4:1 R:1 A3+C#4:1 " * 4 + "R:1 D4+F#4:1 R:1 D4+F#4:1 " * 4,
+        "drum": "B:1 H:1 N:1 H:1 B:1 H:1 N:1 N:1 " * 8,
+    }),
+    "as_stage4": (132, 2, {
+        "lead": "E5:2 R:1 E5:1 F5:2 E5:2 B4:4 R:4 E5:2 R:1 E5:1 G5:2 F5:2 E5:4 R:4 "
+                "A5:2 R:1 A5:1 G5:2 F5:2 E5:2 F5:2 D5:4 E5:2 F5:2 E5:2 D#5:2 E5:8",
+        "rbass": "E2:1 E2:1 E2:1 E3:1 E2:1 E2:1 F2:1 E2:1 " * 8,
+        "pad": "E3+B3:16 E3+B3:16 A3+E4:8 D3+A3:8 E3+B3:16",
+        "drum": "B:1 B:1 N:1 H:1 B:1 H:1 N:1 T:1 " * 8,
+    }),
+    "as_boss": (172, 2, {
+        "guitar": "E4:1 E4:1 G4:1 E4:1 A4:1 E4:1 Bb4:1 A4:1 E4:1 E4:1 G4:1 E4:1 D5:1 B4:1 A4:1 G4:1 " * 2
+                  + "E5:2 D5:1 B4:1 A4:2 G4:1 A4:1 B4:2 A4:1 G4:1 E4:4 ",
+        "rbass": "E2:1 E2:1 E3:1 E2:1 " * 12,
+        "drum": "B:1 H:1 N:1 H:1 B:1 B:1 N:1 N:1 " * 6,
+    }),
     # The Big Move: a bouncy moving-day tune in C
     "big_move": (132, 2, {
         "lead": "C5:1 E5:1 G5:1 E5:1 C6:2 G5:2 A5:1 G5:1 F5:1 E5:1 D5:2 G4:2 "
@@ -338,12 +415,28 @@ def render_tune(name):
             elif part == "drum":
                 hit = {"K": tone(90, 0.09, "triangle", vol=0.55, slide=45),
                        "S": tone(1500, 0.08, "noise", vol=0.2, decay=0.04),
-                       "H": tone(7000, 0.03, "noise", vol=0.07, decay=0.01)}[n]
+                       "H": tone(7000, 0.03, "noise", vol=0.07, decay=0.01),
+                       "B": mix(tone(110, 0.16, "triangle", vol=0.7, slide=40), tone(300, 0.03, "noise", vol=0.2)),      # arena kick
+                       "N": mix(tone(1100, 0.2, "noise", vol=0.3, decay=0.09), tone(190, 0.1, "triangle", vol=0.3, slide=120)),  # gated snare
+                       "T": tone(160, 0.14, "triangle", vol=0.5, slide=90)}[n]
                 pieces.append(chain(hit[:int(dur * RATE)], rest(max(0.0, dur - len(hit) / RATE))))
             elif part == "chord":
                 notes = n.split("+")
                 pieces.append(mix(*[tone(note_freq(x), dur * 0.8, "square", 0.5, 0.075, decay=0.14) for x in notes]))
                 pieces.append(rest(dur * 0.2))
+            elif part == "guitar":                   # an overdriven lead: two detuned squares, a fifth under, clipped
+                f = note_freq(n)
+                w = mix(tone(f, dur * 0.94, "square", 0.5, 0.2, vibrato=6 if dur > step * 2 else 0),
+                        tone(f * 1.006, dur * 0.94, "square", 0.3, 0.16), tone(f * 0.5, dur * 0.94, "square", 0.5, 0.07))
+                pieces.append(np.clip(w * 2.2, -0.24, 0.24).astype(np.float32))
+                pieces.append(rest(dur * 0.06))
+            elif part == "pad":                      # a held synth chord
+                fs = [note_freq(x) for x in n.split("+")]
+                w = mix(*[mix(tone(f, dur, "triangle", vol=0.075), tone(f * 1.004, dur, "square", 0.5, 0.022)) for f in fs])
+                fade = min(len(w) // 4, int(0.05 * RATE))
+                w[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
+                w[-fade:] *= np.linspace(1, 0, fade, dtype=np.float32)
+                pieces.append(w)
             elif part in ("box", "echo"):
                 vol = 0.2 if part == "box" else 0.07
                 f = note_freq(n)
@@ -368,7 +461,11 @@ def render_tune(name):
                 pieces.append(tone(note_freq(n), dur * 0.85, "square", 0.25, 0.17, vibrato=5 if dur > step * 3 else 0))
                 pieces.append(rest(dur * 0.15))
         tracks.append(chain(*pieces))
-    return mix(*tracks)
+    out = mix(*tracks)
+    peak = float(np.abs(out).max()) if len(out) else 0.0
+    if peak > 0.98:                                  # busy tunes are turned down rather than clipped
+        out = out * (0.98 / peak)
+    return out
 
 
 # ---------- player ----------

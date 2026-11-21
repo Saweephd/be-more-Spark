@@ -470,7 +470,11 @@ def run(game, screen=None, max_frames=None):
         if start_held > 0.4:
             pygame.draw.rect(canvas, INK, (W // 2 - 62, H - 16, 124, 10))
             pygame.draw.rect(canvas, YELLOW, (W // 2 - 60, H - 14, int(120 * min(1, start_held / QUIT_HOLD_S)), 6))
-        pygame.transform.scale(canvas, screen.get_size(), screen)
+        if not getattr(game, "hd_only", False):
+            pygame.transform.scale(canvas, screen.get_size(), screen)
+        hd = getattr(game, "render_hd", None)        # sharp full resolution extras, drawn over the doubled picture
+        if hd is not None:
+            hd(screen)
         pygame.display.flip()
         inp.end_frame()
         if inp.p2 is not None:

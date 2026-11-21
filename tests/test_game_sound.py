@@ -39,7 +39,7 @@ class Building(unittest.TestCase):
         for name in sound.TUNES:
             w = sound.render_tune(name)
             secs = len(w) / sound.RATE
-            self.assertTrue(4 < secs < 40, (name, secs))
+            self.assertTrue(4 < secs < 50, (name, secs))
             self.assertLessEqual(float(abs(w).max()), 1.2, name)
 
     def test_silent_when_no_device(self):
