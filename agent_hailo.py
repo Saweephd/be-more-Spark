@@ -720,9 +720,24 @@ class BotGUI:
             self._slide_index = -1
             self._slide_next = 0.0
             self._slides = music_library.slides_for(track)
-            proc = self.play_sound("music", track["path"])
+            proc = None
+            for attempt in range(12):           # the speaker may still be finishing BMO's lead-in line
+                proc = self.play_sound("music", track["path"])
+                if not proc:
+                    break
+                try:
+                    proc.wait(timeout=0.4)          # aplay quit at once: the device was busy
+                except subprocess.TimeoutExpired:
+                    break                           # still playing: good
+                if proc.returncode == 0:
+                    break
+                print(f"[MUSIC] Speaker busy, retrying ({attempt + 1})")
+                proc = None
+                time.sleep(0.35)
             if not proc:
                 self._slides = []
+                if self.current_state == BotStates.JAMMING:
+                    self.set_state(BotStates.IDLE, "Tap to speak")
                 return
             self.set_state(BotStates.JAMMING, track["title"])
             try:
