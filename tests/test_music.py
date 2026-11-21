@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from core import music_library as ml
-from ops import bmo_battery, bmo_buttons, bmo_music
+from ops import bmo_battery, bmo_buttons, bmo_music, bmo_saver
 
 
 def library(*files, names=None):
@@ -81,6 +81,24 @@ class Pictures(unittest.TestCase):
         own = ml.slides_for({"file": "bacon_pancakes.wav"}, slides)
         self.assertEqual([os.path.basename(p) for p in own], ["p.jpg"])
         self.assertEqual(ml.slides_for(None, os.path.join(slides, "missing")), [])
+
+
+class Screensaver(unittest.TestCase):
+    def test_import_shrinks_pictures_to_the_screen(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst:
+            os.makedirs(os.path.join(src, "Land of Ooo"))
+            Image.new("RGB", (3840, 2160), (40, 120, 200)).save(os.path.join(src, "Land of Ooo", "Tree Fort.png"))
+            Image.new("RGB", (600, 900), (200, 60, 40)).save(os.path.join(src, "candy.jpg"))
+            open(os.path.join(src, "notes.txt"), "w").write("not a picture")
+            self.assertEqual(bmo_saver.cmd_import(src, dst), 2)
+            pics = ml.screensaver_pictures(dst)
+            self.assertEqual([os.path.basename(p) for p in pics], ["candy.jpg", "land_of_ooo_tree_fort.jpg"])
+            for p in pics:
+                self.assertEqual(Image.open(p).size, (800, 480))
+
+    def test_no_folder_means_no_pictures(self):
+        self.assertEqual(ml.screensaver_pictures("/nonexistent/folder"), [])
 
 
 class Tools(unittest.TestCase):

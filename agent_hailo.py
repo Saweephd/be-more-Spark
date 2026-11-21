@@ -43,7 +43,7 @@ from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloo
 from core import extras
 from core import music_library
 from core import battery
-from core.config import (SLIDE_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
+from core.config import (SLIDE_SECONDS, SCREENSAVER_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
                          POWEROFF_COMMANDS)
 
 # =========================================================================
@@ -230,6 +230,10 @@ class BotGUI:
         self._slide_index = -1
         self._slide_next = 0.0
         self._slide_image = None
+        self._saver_pics = []                              # screen saver pictures, shuffled
+        self._saver_scan = 0.0
+        self._saver_index = -1
+        self._saver_next = 0.0
         self._clock_last = None
 
         self.animations = {}
@@ -738,7 +742,26 @@ class BotGUI:
             return
         self._slide_next = now + SLIDE_SECONDS
         self._slide_index = (self._slide_index + 1) % len(self._slides)
-        path = self._slides[self._slide_index]
+        self._show_picture(self._slides[self._slide_index])
+
+    def _screensaver_pictures(self, now):
+        """The screen saver's pictures, looked up again every few minutes so new ones show up."""
+        if now - self._saver_scan > 300:
+            self._saver_scan = now
+            pics = music_library.screensaver_pictures()
+            if sorted(pics) != sorted(self._saver_pics):
+                random.shuffle(pics)
+                self._saver_pics, self._saver_index = pics, -1
+        return self._saver_pics
+
+    def _update_screensaver_pictures(self, now):
+        if now < self._saver_next:
+            return
+        self._saver_next = now + SCREENSAVER_SECONDS
+        self._saver_index = (self._saver_index + 1) % len(self._saver_pics)
+        self._show_picture(self._saver_pics[self._saver_index])
+
+    def _show_picture(self, path):
         try:
             img = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
             img = ImageOps.pad(img, (self.BG_WIDTH, self.BG_HEIGHT), Image.Resampling.LANCZOS, color="#000000")
@@ -898,6 +921,12 @@ class BotGUI:
             return
 
         now = time.time()
+        if self.current_state == BotStates.SCREENSAVER and self._screensaver_pictures(now):
+            self._update_screensaver_pictures(now)
+            if self.status_label.winfo_ismapped(): self.status_label.place_forget()
+            self.master.after(250, self.update_animation)
+            return
+        self._saver_next = 0.0
         # Mood Logic
         if now - self.last_mood_change > self.mood_duration:
             self.current_mood = random.choice(list(self.expressions_map.keys()))

@@ -97,6 +97,7 @@ sounds/music/*
 !sounds/music/.gitkeep
 core/music/library.json
 slides/
+screensaver/
 
 # Game high scores
 core/games/scores.json

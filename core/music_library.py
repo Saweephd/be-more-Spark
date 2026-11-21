@@ -15,6 +15,7 @@ import re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUSIC_DIR = os.path.join(ROOT, "sounds", "music")
 SLIDES_DIR = os.path.join(ROOT, "slides")
+SCREENSAVER_DIR = os.path.join(ROOT, "screensaver")
 NAMES_FILE = os.path.join(ROOT, "core", "music", "library.json")
 PICTURE_TYPES = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")
 
@@ -118,6 +119,16 @@ def spoken_list(library=None, limit=8):
     line = "BMO knows %d songs: %s" % (len(titles), ", ".join(shown[:-1]))
     line += (", %s, and %d more." % (shown[-1], more)) if more else (", and %s." % shown[-1])
     return line + " Ask BMO to play one by name."
+
+
+def screensaver_pictures(folder=None):
+    """Every picture in the screen saver folder, including sub folders, in name order."""
+    folder = folder or SCREENSAVER_DIR
+    found = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        found += [os.path.join(root, f) for f in files if f.lower().endswith(PICTURE_TYPES) and not f.startswith(".")]
+    return sorted(found)
 
 
 def slides_for(track=None, slides_dir=None):

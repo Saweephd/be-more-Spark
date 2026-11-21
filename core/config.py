@@ -198,6 +198,10 @@ POWEROFF_COMMANDS = [["systemctl", "poweroff"], ["sudo", "-n", "/usr/sbin/powero
 # Seconds each picture stays up while a song plays (pictures live in slides/).
 SLIDE_SECONDS = float(os.environ.get("BMO_SLIDE_SECONDS", "6"))
 
+# Screen saver pictures: after a minute of quiet BMO rotates the pictures in screensaver/
+# (kept on the device only). With no pictures there, BMO cycles its own faces as before.
+SCREENSAVER_SECONDS = float(os.environ.get("BMO_SCREENSAVER_SECONDS", "3"))
+
 # The USB speaker forgets its own level when it is replugged, so BMO sets it at every start.
 SPEAKER_CARD = os.environ.get("BMO_SPEAKER_CARD", "UACDemoV10")
 SPEAKER_LEVEL_PERCENT = int(os.environ.get("BMO_SPEAKER_LEVEL", "75"))
