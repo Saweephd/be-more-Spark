@@ -88,6 +88,10 @@ class AlienStorm(Game):
     scenes = True               # tests turn this off to stay in the air
 
     # ------------------------------------------------------------------ set up
+    def __init__(self, seed=None, scores_path=None):
+        super().__init__(seed=seed, scores_path=scores_path)
+        self.scene, self.landing, self.talk = None, None, {}     # the title screen is drawn before any game starts
+
     def reset(self):
         self.score = 0
         self.win = False

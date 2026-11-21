@@ -39,6 +39,20 @@ def run(g, inp, seconds):
 
 @unittest.skipUnless(OK, "pygame not installed")
 class Flight(unittest.TestCase):
+    def test_whole_game_loop_runs_from_the_title_screen(self):
+        pygame.display.init()
+        pygame.font.init()
+        screen = pygame.display.set_mode((800, 480))
+        g = G.AlienStorm(seed=3, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        res = common.run(g, screen=screen, max_frames=30)        # title, exactly as the menu starts it
+        self.assertEqual(res["game"], "alien_storm")
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+        common.run(g, screen=screen, max_frames=240)             # into the takeoff scene
+        self.assertEqual(g.state, "play")
+        g.scene = None
+        common.run(g, screen=screen, max_frames=240)             # and into flight
+        self.assertEqual(g.phase, "flight")
+
     def test_exact_lines(self):
         self.assertEqual(lines.HIT_KJ, "Come on man, do some of that pilot ish!")
         self.assertEqual(lines.FLEX_ALEX, "I make this ish look good.")
