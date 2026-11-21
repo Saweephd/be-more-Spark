@@ -43,7 +43,7 @@ from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloo
 from core import extras
 from core import music_library
 from core import battery
-from core.config import (SLIDE_SECONDS, SCREENSAVER_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
+from core.config import (SLIDE_SECONDS, SCREENSAVER_SECONDS, SCREENSAVER_AFTER_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
                          POWEROFF_COMMANDS)
 
 # =========================================================================
@@ -949,7 +949,7 @@ class BotGUI:
             print(f"[MOOD] BMO is now feeling: {self.current_mood}")
 
         # Screensaver Auto-Trigger
-        if self.current_state == BotStates.IDLE and (now - self.last_state_change) > 60:
+        if self.current_state == BotStates.IDLE and (now - self.last_state_change) > SCREENSAVER_AFTER_SECONDS:
             self.set_state(BotStates.SCREENSAVER, "Screensaver...")
 
         # If in screensaver, pick expression randomly; change every 8-18 s

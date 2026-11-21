@@ -201,6 +201,8 @@ SLIDE_SECONDS = float(os.environ.get("BMO_SLIDE_SECONDS", "6"))
 # Screen saver pictures: after a minute of quiet BMO rotates the pictures in screensaver/
 # (kept on the device only). With no pictures there, BMO cycles its own faces as before.
 SCREENSAVER_SECONDS = float(os.environ.get("BMO_SCREENSAVER_SECONDS", "3"))
+# How long BMO sits idle before the screen saver starts.
+SCREENSAVER_AFTER_SECONDS = float(os.environ.get("BMO_SCREENSAVER_AFTER_SECONDS", "1800"))
 
 # The USB speaker forgets its own level when it is replugged, so BMO sets it at every start.
 SPEAKER_CARD = os.environ.get("BMO_SPEAKER_CARD", "UACDemoV10")
