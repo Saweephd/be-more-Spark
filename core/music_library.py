@@ -21,7 +21,7 @@ PICTURE_TYPES = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")
 
 # Words that carry no meaning when matching a spoken request to a song name.
 _FILLER = {"the", "a", "an", "song", "music", "tune", "theme", "track", "please", "bmo", "by", "from", "of", "to", "me", "for", "us", "some"}
-_PLAY = r"\b(play|sing|put on|start|hear|listen to)\b"
+_PLAY = r"\b(play\w*|sing|put on|start|hear|listen to)\b"      # play\w*: speech to text often hears "playback", "playing"
 _STOP = (r"\b(stop|pause|end|quit|kill|turn off|shut off|cut)( the| that| this| your)? ?(music|song|singing|playing|tune|jam|jamming)\b|"
          r"\b(music|song) off\b|\bno more (music|songs)\b")
 _LIST = (r"\b(what|which) (songs|music|tunes)\b|\b(list|name)( me)?( the| your| all)*( of)?( the| your)? (songs|tunes|music)\b|"
@@ -74,6 +74,12 @@ def tracks(music_dir=None, names_file=None):
     return found
 
 
+def _sounds_like(word, said):
+    """A near miss from speech to text ("pancake" for "pancakes", "adventur" for "adventure")."""
+    import difflib
+    return len(word) >= 5 and any(difflib.SequenceMatcher(None, word, w).ratio() >= 0.82 for w in said)
+
+
 def match_track(text, library=None):
     """The song a spoken request names, or None. "Play some music" names no song."""
     t = _norm(text)
@@ -90,7 +96,7 @@ def match_track(text, library=None):
             if _norm(name) in t:
                 score = 100 + len(want)
             else:
-                hits = sum(1 for w in want if w in said)
+                hits = sum(1 for w in want if w in said or _sounds_like(w, said))
                 # Every word for short names; one miss allowed in names of three or more words.
                 need = len(want) if len(want) < 3 else len(want) - 1
                 score = hits if hits >= need else 0
