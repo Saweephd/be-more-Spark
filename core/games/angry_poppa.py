@@ -363,6 +363,7 @@ def draw_stairs(surf, x, direction, open_):
 
 
 class AngryPoppa(Game):
+    levels = tuple(st["title"] for st in STAGES)
     name = "angry_poppa"
     title = "Angry Poppa"
     music = "angry_poppa"
@@ -389,10 +390,11 @@ class AngryPoppa(Game):
         self.hearts = 4
         self.win = False
         self.up = {k: 0 for k in UPGRADES}
-        self.level_index = 0
+        self.level_index = min(self.level_choice, len(STAGES) - 1)
         self.load_level()
 
     def load_level(self):
+        self.reach_level(self.level_index)
         lv = self.level = build_stage(self.level_index)
         st = self.stage = lv["stage"]
         self.x, self.y = float(lv["start"]), float(FLOOR)

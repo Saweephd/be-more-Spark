@@ -2,6 +2,11 @@
 
 Big button jumps (hold for a higher jump). D-pad down ducks under birds.
 Score is the distance run plus fifty for every treat.
+
+Two modes, chosen on the title screen:
+  Relax      the speed levels off, as it always has
+  Challenge  the speed keeps climbing, and from 2000 points Mazee runs on energy:
+             it drains as she runs and every bone tops it up. Out of energy, out of the race.
 """
 import pygame
 
@@ -9,6 +14,9 @@ from . import common as c
 from .common import H, W, Game, sprite, text
 
 GROUND = 198
+ENERGY_FROM = 2000      # Challenge mode: score at which Mazee starts running on energy
+ENERGY_DRAIN = 0.11     # energy used per second (a full bar lasts about 9 seconds)
+BONE_ENERGY = 0.3       # energy each bone gives back
 DOG_X = 44
 
 PAL = {"W": (250, 250, 246), "G": (206, 206, 214), "K": (30, 30, 36), "P": (240, 130, 150),
@@ -65,6 +73,7 @@ class MazeeRun(Game):
     title = "Mazee Run"
     music = "mazee_run"
     help_lines = ("Big button: jump (hold to jump higher)", "D-pad down: duck", "Grab the treats!")
+    modes = ("Relax", "Challenge")
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -89,10 +98,23 @@ class MazeeRun(Game):
         self.next_spawn = 180.0
         self.next_bone = 260.0
         self.anim = 0.0
+        self.energy = 1.0
+        self.tired = False
+
+    @property
+    def challenge(self):
+        return self.modes[self.mode] == "Challenge"
 
     @property
     def speed(self):
+        if self.challenge:          # keeps climbing, more slowly past the old cap
+            base = 150.0 + self.dist / 40.0
+            return base if base <= 340.0 else min(600.0, 340.0 + (base - 340.0) * 0.45)
         return min(340.0, 150.0 + self.dist / 40.0)
+
+    @property
+    def energy_on(self):
+        return self.challenge and self.score >= ENERGY_FROM
 
     def dog_rect(self):
         if self.ducking:
@@ -142,7 +164,7 @@ class MazeeRun(Game):
         self.next_bone -= move
         if self.next_bone <= 0:
             self.bones.append({"x": float(W + 10), "y": GROUND - self.rng.choice((16, 54, 84))})
-            self.next_bone = self.rng.uniform(220, 520)
+            self.next_bone = self.rng.uniform(220, 520) * (0.75 if self.energy_on else 1.0)
         for o in self.obstacles:
             o["x"] -= move * (1.25 if o["kind"] == "bird" else 1.0)
         for b in self.bones:
@@ -154,8 +176,16 @@ class MazeeRun(Game):
             if dog.colliderect(pygame.Rect(int(b["x"]), b["y"], 24, 12)):
                 self.bones.remove(b)
                 self.treats += 1
+                self.energy = min(1.0, self.energy + BONE_ENERGY)
                 self.sfx("coin")
         self.score = int(self.dist / 10) + self.treats * 50
+        if self.energy_on:
+            self.energy -= ENERGY_DRAIN * dt
+            if self.energy <= 0:
+                self.energy = 0.0
+                self.tired = True
+                self.game_over()
+                return
         for o in self.obstacles:
             if dog.colliderect(pygame.Rect(int(o["x"]) + 3, o["y"] + 3, o["w"] - 6, o["h"] - 3)):
                 self.game_over()
@@ -204,6 +234,17 @@ class MazeeRun(Game):
             surf.blit(self.run_frames[int(self.anim) % 2], (DOG_X, int(self.y) - 32))
         text(surf, "Score %d" % self.score, (8, 6), 20)
         text(surf, "Treats %d" % self.treats, (W - 80, 6), 20)
+        if self.challenge:
+            if self.energy_on:
+                low = self.energy < 0.3 and int(self.anim * 2) % 2
+                pygame.draw.rect(surf, (40, 40, 50), (W // 2 - 52, 8, 104, 10), border_radius=3)
+                col = (230, 70, 60) if self.energy < 0.3 else (250, 200, 80)
+                pygame.draw.rect(surf, col, (W // 2 - 50, 10, int(100 * self.energy), 6), border_radius=2)
+                text(surf, "ENERGY: GRAB BONES!" if low else "ENERGY", (W // 2, 20), 14, c.WHITE, center=True)
+            elif self.score >= ENERGY_FROM - 300:
+                text(surf, "Energy kicks in at %d!" % ENERGY_FROM, (W // 2, 8), 14, (250, 200, 80), center=True)
+        if self.tired and self.state == "over":
+            text(surf, "Mazee is pooped!", (W // 2, 40), 20, (250, 200, 80), center=True)
 
 
 def make(**kw):

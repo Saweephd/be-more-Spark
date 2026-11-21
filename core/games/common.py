@@ -207,12 +207,13 @@ def load_scores(path=None):
         return {}
 
 
-def save_score(name, score, path=None):
-    """Record a score. Returns (best, is_new_best)."""
+def save_score(name, score, path=None, best=True):
+    """Record a score. Returns (best, is_new_best). With best=False the value is simply stored."""
     path = path or SCORES_FILE
     scores = load_scores(path)
-    best = int(scores.get(name, 0))
-    new_best = score > best
+    old = int(scores.get(name, 0))
+    new_best = score > old or (not best and score != old)
+    best = old
     if new_best:
         scores[name] = int(score)
         try:
@@ -234,6 +235,8 @@ class Game:
     title_color = YELLOW
     music = None            # name of this game's tune in sound.TUNES
     sound = _sound.Silent()  # run() swaps in the real player
+    levels = ()             # level names: the title screen lets you start at any level reached
+    modes = ()              # play modes chosen on the title screen, for example ("Relax", "Challenge")
 
     def __init__(self, seed=None, scores_path=None):
         self.rng = random.Random(seed)
@@ -244,6 +247,11 @@ class Game:
         self.new_best = False
         self.time = 0.0
         self.last_score = 0
+        saved = load_scores(scores_path)
+        self.unlocked = max(1, min(len(self.levels) or 1, int(saved.get(self.name + "_level", 1))))
+        self.level_choice = self.unlocked - 1    # index of the level to start on
+        self.mode = int(saved.get(self.name + "_mode", 0)) % (len(self.modes) or 1)
+        self.option_row = 0
 
     # games override these three
     def reset(self):
@@ -262,6 +270,41 @@ class Game:
     def sfx(self, name):
         self.sound.play(name)
 
+    def reach_level(self, index):
+        """Call when the player gets to level `index` (from 0): it becomes choosable on the title screen."""
+        if index + 1 > self.unlocked and index < len(self.levels):
+            self.unlocked = index + 1
+            save_score(self.name + "_level", self.unlocked, self.scores_path)
+
+    def title_options(self):
+        rows = []
+        if len(self.levels) > 1 and self.unlocked > 1:
+            rows.append("level")
+        if len(self.modes) > 1:
+            rows.append("mode")
+        return rows
+
+    def title_input(self, inp):
+        rows = self.title_options()
+        if not rows:
+            return
+        self.option_row = min(self.option_row, len(rows) - 1)
+        if "up" in inp.pressed and self.option_row > 0:
+            self.option_row -= 1
+            self.sfx("select")
+        if "down" in inp.pressed and self.option_row < len(rows) - 1:
+            self.option_row += 1
+            self.sfx("select")
+        step = (1 if "right" in inp.pressed else 0) - (1 if "left" in inp.pressed else 0)
+        if not step:
+            return
+        if rows[self.option_row] == "level":
+            self.level_choice = (self.level_choice + step) % self.unlocked
+        else:
+            self.mode = (self.mode + step) % len(self.modes)
+            save_score(self.name + "_mode", self.mode, self.scores_path, best=False)
+        self.sfx("select")
+
     def game_over(self):
         self.sound.stop_music()
         self.sfx("win" if getattr(self, "win", False) else "over")
@@ -274,6 +317,7 @@ class Game:
         """Advance one frame, including the title, pause and game over screens."""
         self.time += dt
         if self.state == "title":
+            self.title_input(inp)
             if "a" in inp.pressed or "start" in inp.pressed:
                 self.reset()
                 self.state = "play"
@@ -310,9 +354,18 @@ class Game:
             for line in self.help_lines:
                 text(surf, line, (W // 2, y), 18, WHITE, center=True)
                 y += 16
+            rows = self.title_options()
+            oy = 196 - 18 * len(rows)
+            for i, row in enumerate(rows):
+                if row == "level":
+                    label = "Start at: %d. %s" % (self.level_choice + 1, self.levels[self.level_choice])
+                else:
+                    label = "Mode: %s" % self.modes[self.mode]
+                col = YELLOW if i == self.option_row else WHITE
+                text(surf, "<  %s  >" % label, (W // 2, oy + 18 * i), 18, col, center=True)
             if int(self.time * 2) % 2 == 0:
-                text(surf, "Press the big button", (W // 2, 190), 20, YELLOW, center=True)
-            text(surf, "Best %d" % self.best, (W // 2, 216), 18, WHITE, center=True)
+                text(surf, "Press the big button", (W // 2, 200), 20, YELLOW, center=True)
+            text(surf, "Best %d" % self.best, (W // 2, 222), 18, WHITE, center=True)
             return
         self.draw(surf)
         if self.state == "paused":

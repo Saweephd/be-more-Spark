@@ -50,6 +50,26 @@ def match_shutdown(text):
     return bool(re.search(_SHUTDOWN, t)) and not re.search(_NOT_SHUTDOWN, t)
 
 
+_TV = r"\b(tv|television|big screen)\b"
+_TV_ON = r"\b(show|put|cast|mirror|send|go|get)\b"
+_TV_OFF = (r"\b(come back|stop (showing|casting|mirroring)|get off|go off|off the (tv|television|big screen)|"
+           r"take (yourself|bmo|it) off|turn off the (tv|television) (mirror|cast))\b")
+
+
+def match_tv(text):
+    """'on' for "BMO, show me on the TV", 'off' for "come back" or "get off the TV", else None."""
+    t = _norm(text)
+    if re.search(r"\bcome back\b", t) and len(t.split()) <= 5:
+        return "off"
+    if not re.search(_TV, t):
+        return None
+    if re.search(_TV_OFF, t):
+        return "off"
+    if re.search(_TV_ON, t) and re.search(r"\bon (the |my |our )?(tv|television|big screen)\b", t):
+        return "on"
+    return None
+
+
 def match_yes(text):
     return bool(re.search(r"\b(yes|yeah|yep|yup|sure|do it|please do|go ahead|i'?m sure|affirmative|correct|ok|okay)\b", _norm(text)))
 

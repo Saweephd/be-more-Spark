@@ -51,6 +51,56 @@ class GameTests(unittest.TestCase):
         self.assertEqual(game.state, "play")
         return game, inp
 
+    def test_level_select_offers_only_levels_reached(self):
+        from core.games import scary_babies, uncle_t
+        for module, attr, expect in ((angry_poppa, "level_index", 2), (uncle_t, "stretch", 2),
+                                     (scary_babies, "board", 3)):
+            game = module.make(seed=1, scores_path=self.scores)
+            self.assertEqual(game.title_options(), [])            # nothing reached yet: no choice shown
+            game.reach_level(2)
+            game = module.make(seed=1, scores_path=self.scores)     # remembered across games
+            self.assertEqual(game.title_options(), ["level"])
+            self.assertEqual(game.level_choice, 2)                  # starts on the furthest level reached
+            inp = common.Input()
+            press(game, inp, "left")
+            self.assertEqual(game.level_choice, 1)
+            press(game, inp, "right")
+            press(game, inp, "right")
+            self.assertEqual(game.level_choice, 0)                  # wraps round
+            press(game, inp, "left")
+            game.render(self.canvas)
+            press(game, inp, "a")
+            self.assertEqual(game.state, "play")
+            self.assertEqual(getattr(game, attr), expect, module.__name__)
+            os.unlink(self.scores)
+
+    def test_mazee_modes(self):
+        game = mazee_run.make(seed=2, scores_path=self.scores)
+        self.assertEqual(game.title_options(), ["mode"])
+        inp = common.Input()
+        press(game, inp, "right")
+        self.assertEqual(game.modes[game.mode], "Challenge")
+        press(game, inp, "a")
+        game.dist = 40000.0
+        self.assertGreater(game.speed, 340.0)                       # keeps climbing
+        game.obstacles, game.next_spawn = [], 1e9
+        game.score = mazee_run.ENERGY_FROM
+        game.treats = 100                                           # keep the score above the threshold
+        for _ in range(60 * 12):
+            game.bones, game.next_bone = [], 1e9                    # no bones: she tires out
+            game.update(DT, inp)
+            if game.state == "over":
+                break
+        self.assertEqual(game.state, "over")
+        self.assertTrue(game.tired)
+        relax = mazee_run.make(seed=2, scores_path=self.scores)    # the chosen mode is remembered
+        self.assertEqual(relax.modes[relax.mode], "Challenge")
+        relax.mode = 0
+        relax.reset()
+        relax.dist = 40000.0
+        self.assertEqual(relax.speed, 340.0)
+        self.assertFalse(relax.energy_on)
+
     def test_every_game_survives_random_play_and_draws(self):
         rng = random.Random(7)
         for name in GAMES:

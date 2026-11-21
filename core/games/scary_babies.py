@@ -96,6 +96,7 @@ BOSS = [r.center(22, ".") for r in _BOSS_ROWS]
 
 
 class ScaryBabies(Game):
+    levels = tuple("Board %d" % (i + 1) for i in range(8))
     name = "scary_babies"
     title = "Scary Babies"
     music = "scary_babies"
@@ -119,7 +120,7 @@ class ScaryBabies(Game):
     def reset(self):
         self.score = 0
         self.lives = 3
-        self.board = 1
+        self.board = self.level_choice + 1
         self.start_board()
 
     def start_board(self):
@@ -174,6 +175,7 @@ class ScaryBabies(Game):
                 self.score += step
             elif self.anim > 2.2:
                 self.board += 1
+                self.reach_level(self.board - 1)
                 self.start_board()
             return
         self.safe = max(0.0, self.safe - dt)

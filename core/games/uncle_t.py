@@ -209,6 +209,7 @@ def build_voices():
 
 # ---------- the game ----------
 class UncleT(Game):
+    levels = tuple(STRETCHES)
     name = "uncle_t"
     title = "Uncle T's Big Adventure"
     help_lines = ("D-pad: steer, up speeds up, down brakes", "Big button: turbo   Triangle: horn",
@@ -257,8 +258,10 @@ class UncleT(Game):
         self.taunt_cool = 0.0
         self.crashed = 0
         self.shaken = 0
-        self.banner = (STRETCHES[0], 2.5)
-        self.stretch = 0
+        start = min(self.level_choice, len(STRETCHES) - 1)
+        self.dist = float(start * STRETCH)
+        self.banner = (STRETCHES[start], 2.5)
+        self.stretch = start
         self.cue = set()
         self.end_reason = ""
 
@@ -331,6 +334,7 @@ class UncleT(Game):
         stage = min(3, int(self.dist // STRETCH))
         if stage != self.stretch:
             self.stretch = stage
+            self.reach_level(stage)
             self.banner = (STRETCHES[stage], 2.5)
             self.sfx("start")
         if self.banner[1] > 0:

@@ -603,6 +603,14 @@ class Brain:
                 self.history.append({"role": "assistant", "content": line})
                 yield line
                 return
+            tv = extras.match_tv(user_text)
+            if tv:
+                line = "BMO is going on the big screen!" if tv == "on" else "BMO is back!"
+                print(f"[LLM-STREAM] TV request MATCHED: {tv}")
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield json.dumps({"action": "tv_" + tv})
+                return
             game = extras.match_game(user_text)
             if game:
                 line = "Let's look at the games!" if game == "menu" else "Yay! Let's play %s!" % extras.GAME_TITLES[game]

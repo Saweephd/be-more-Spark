@@ -902,6 +902,22 @@ class BotGUI:
             if self.current_state == BotStates.LOW_BATTERY:
                 self.set_state(BotStates.IDLE, "Tap to speak")
 
+    def tv_cast(self, on):
+        """Show BMO on the den TV through its Chromecast (ops/bmo_tv.py), or stop."""
+        def worker():
+            unit = "bmo-tv"
+            subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True)
+            subprocess.run(["systemctl", "--user", "reset-failed", unit], capture_output=True)
+            if not on:
+                print("[TV] Stopped casting")
+                return
+            here = os.path.dirname(os.path.abspath(__file__))
+            r = subprocess.run(["systemd-run", "--user", "--unit=" + unit, "--setenv=DISPLAY=:0",
+                                "--working-directory=" + here, sys.executable, "ops/bmo_tv.py", "start"],
+                               capture_output=True, text=True)
+            print(f"[TV] Casting started: {r.returncode} {r.stderr.strip()[:120]}")
+        threading.Thread(target=worker, daemon=True).start()
+
     def shutdown_device(self):
         """Power the Pi off after BMO has finished saying goodbye."""
         def worker():
@@ -1705,6 +1721,9 @@ class BotGUI:
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "shutdown":
                 self.shutdown_device()
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") in ("tv_on", "tv_off"):
+                self.tv_cast(action_data.get("action") == "tv_on")
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "set_timer":
                 # Real handler — was advertised in the system prompt but

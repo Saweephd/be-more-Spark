@@ -27,6 +27,15 @@ class GameRequests(unittest.TestCase):
 
 
 class Shutdown(unittest.TestCase):
+
+    def test_tv_commands(self):
+        for t in ("BMO, show me on the TV", "put yourself on the TV", "Hey BMO, go on the big screen",
+                  "cast yourself on the television"):
+            self.assertEqual(extras.match_tv(t), "on", t)
+        for t in ("BMO come back", "come back", "get off the TV", "stop showing on the TV"):
+            self.assertEqual(extras.match_tv(t), "off", t)
+        for t in ("what's on TV tonight", "turn on the lights", "I watched the TV", "come back to the kitchen later on please"):
+            self.assertIsNone(extras.match_tv(t), t)
     def test_shutdown_phrases(self):
         for said in ("shut down", "Hey, shut down please.", "power off", "turn yourself off", "go to sleep for the night"):
             self.assertTrue(extras.match_shutdown(said), said)
