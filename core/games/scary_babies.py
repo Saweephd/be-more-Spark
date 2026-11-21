@@ -63,29 +63,31 @@ LEGS_B = ["..jjjJjjjj..", "..jjj...jj..", ".jjj.....jj.", ".jjj.....jjj", ".kkk.
 BACK_TOP = ["...YYYYY....", "..YYYYYYY...", "..YYYYYYYY..", "..YYYYYYYY..", "..YYYYYYYY..", "...YYYYYY...", "...ssSSs....",
             "....ss......", "s.gggggggg.s", "sgggggggggg.", ".gggggggggs.", "..gggggggg..", "..GGGGGGGG..", "..jjjjjjjj.."]
 
-BPAL = {"p": (238, 214, 202), "P": (200, 168, 160), "e": (255, 40, 40), "E": (110, 50, 80), "c": (90, 160, 240),
-        "w": (255, 255, 255), "k": (30, 24, 30)}
+# A cracked porcelain doll baby: hollow eyes with red pinpoints and a grin full of little teeth.
+BPAL = {"p": (226, 222, 212), "P": (160, 156, 162), "e": (255, 34, 34), "k": (14, 10, 16), "C": (96, 84, 96),
+        "w": (250, 248, 236)}
 BABY = [
-    "....pkpp....",
-    "..pppkpppp..",
-    ".ppEEppEEpp.",
-    ".pEeEppEeEp.",
-    "pppEEppEEppp",
-    "pppppppppppp",
-    "pppppccppppp",
-    "ppppcwwcpppp",
-    ".ppppccpppp.",
+    "....kk.k....",
+    "..ppppppCp..",
+    ".pppppppCpp.",
+    ".pkkkppkkkCp",
+    "ppkekppkekpp",
+    "ppkkkppkkkPp",
+    "pCpppppppppp",
+    "ppkwkwkwkwpp",
+    ".ppkkkkkkpp.",
     ".PPpppppppP.",
-    "..PPPPPPPP..",
+    "..PPPCPPPP..",
     "....PPPP....",
 ]
 
-KPAL = {"n": (240, 150, 190), "N": (200, 100, 150), "p": (238, 214, 202), "P": (200, 168, 160), "e": (255, 40, 40),
-        "k": (30, 24, 30), "r": (240, 120, 120), "m": (150, 30, 50), "d": (250, 250, 245), "D": (210, 210, 218)}
+KPAL = {"n": (150, 104, 124), "N": (104, 64, 88), "p": (222, 216, 206), "P": (156, 150, 158), "e": (255, 34, 34),
+        "k": (14, 10, 16), "r": (170, 96, 110), "m": (120, 16, 36), "d": (230, 226, 214), "D": (176, 170, 178),
+        "C": (90, 78, 92), "w": (250, 248, 236)}
 _BOSS_ROWS = [
-    "nnnnnnnnnnnn", "nnnnnnnnnnnnnnnn", "nnNNNNNNNNNNNNNNnn", "nnNppppppppppppppNnn", "nNppppppppppppppppNn",
-    "nNpkkkppppppppkkkpNn", "NppkeekppppkeekppN", "pppkkkppppppkkkppp", "prrpppppppppppprrp",
-    "ppppmmmmmmmmmmpppp", "ppppmkkkkkkkkmpppp", "pppppmmmmmmmmppppp", "pppppppppppppp",
+    "nnnnnnnnnnnn", "nnnnnnnnnnnnnnnn", "nnNNNNNNNNNNNNNNnn", "nnNppppppCpppppppNnn", "nNpppppppCCppppppNn",
+    "nNpkkkkpppppCpkkkkpNn", "NpkkekkppppkkekkpN", "ppkkkkpppppCkkkkpp", "prrpppppppppppCrrp",
+    "pppmmmmmmmmmmmmppp", "ppmwkwkwkwkwkwkmpp", "pppmkwkwkwkwkwmppp", "pppppmmmmmmmmppppp",
     "PppppppppppppppppP", "pppPppppppppppppPppp", "pppPppppppppppppPppp", "ppp.dddddddddddd.ppp",
     "pp..dddddddddddd..pp", "....dddDDDDDDddd....", "....dddddddddddd....", "....ppp......ppp....",
     "...pppp......pppp...", "...PPPP......PPPP...",
@@ -139,6 +141,10 @@ class ScaryBabies(Game):
         self.bonus_t = 0.0
         self.safe = 1.5
         self.timer = 0.0
+        self.flicker = 0.0
+        self.flicker_t = 4.0
+        self.redflash = 0.0
+        self.peepers = [[(i * 97 + 23) % (W - 20) + 10, (i * 53) % 90 + 20, (i * 1.7) % 5.0] for i in range(6)]
 
     @property
     def baby_speed(self):
@@ -171,6 +177,7 @@ class ScaryBabies(Game):
                 self.start_board()
             return
         self.safe = max(0.0, self.safe - dt)
+        self.update_spooks(dt)
         self.bonus_t += dt
         if self.bonus_t >= 2.0:
             self.bonus_t -= 2.0
@@ -179,6 +186,23 @@ class ScaryBabies(Game):
         self.update_player(dt, inp)
         self.update_boss(dt)
         self.update_babies(dt)
+
+    def update_spooks(self, dt):
+        """The lights stutter now and then, and red eyes open and shut in the dark."""
+        self.flicker = max(0.0, self.flicker - dt)
+        self.redflash = max(0.0, self.redflash - dt)
+        self.flicker_t -= dt
+        if self.flicker_t <= 0:
+            self.flicker = 0.45
+            self.flicker_t = self.rng.uniform(5.0, 11.0)
+            if self.rng.random() < 0.6:
+                self.sfx("giggle")
+        for pe in self.peepers:
+            pe[2] -= dt
+            if pe[2] < -1.2:                    # eyes shut; open somewhere else later
+                pe[0] = self.rng.randrange(10, W - 10)
+                pe[1] = self.rng.randrange(20, 110)
+                pe[2] = self.rng.uniform(2.0, 6.0)
 
     def ladder_here(self, lower=None, upper=None):
         for lx, lo in LADDERS:
@@ -292,7 +316,8 @@ class ScaryBabies(Game):
             elif b["st"] == "crawl":
                 b["crawl"] -= dt
                 d = 1 if self.px > b["x"] else -1
-                b["x"] += d * 34 * dt
+                lurch = 0.25 + 1.75 * max(0.0, math.sin(b["crawl"] * 7.0)) ** 2   # creep, creep, LUNGE
+                b["x"] += d * 34 * lurch * dt
                 b["dir"] = d
                 b["y"] = GIRDERS[b["g"]].y_at(b["x"])
                 if b["crawl"] <= 0:
@@ -307,7 +332,7 @@ class ScaryBabies(Game):
         b["st"] = "roll"
         if g == 0 and self.board >= 2 and self.rng.random() < min(0.5, 0.15 * (self.board - 1)):
             b["st"], b["crawl"] = "crawl", 8.0
-            self.sfx("cry")
+            self.sfx("giggle")
 
     def check_baby(self, b):
         if self.state_p in ("dying", "cleared") or b.get("gone"):
@@ -334,9 +359,10 @@ class ScaryBabies(Game):
             self.pops.append([bx, by - 16, "100", 0.8])
 
     def lose_life(self):
+        self.redflash = 0.5
         self.lives -= 1
         self.state_p, self.anim = "dying", 0.0
-        self.sfx("hurt" if self.lives > 0 else "cry")
+        self.sfx("hurt" if self.lives > 0 else "giggle")
 
     # ----- draw -----
     def draw_title_art(self, surf):
@@ -349,6 +375,11 @@ class ScaryBabies(Game):
             surf.set_at((x, y), (200, 200, 230))
         pygame.draw.circle(surf, (240, 236, 200), (360, 30), 12)
         pygame.draw.circle(surf, (26, 18, 44), (366, 26), 11)
+        for x, y, t in self.peepers:            # something watching from the dark
+            if t > 0 and not (0.0 < t % 2.3 < 0.12):
+                for ex in (x - 3, x + 3):
+                    pygame.draw.circle(surf, (110, 0, 10), (ex, y), 2)
+                    surf.set_at((ex, y), (255, 60, 60))
         for lx, lo in LADDERS:
             top, bot = GIRDERS[lo + 1].y_at(lx), GIRDERS[lo].y_at(lx)
             pygame.draw.line(surf, (110, 200, 230), (lx - 5, top), (lx - 5, bot), 2)
@@ -376,10 +407,17 @@ class ScaryBabies(Game):
         self.draw_boss(surf)
         for b in self.babies:
             img = self.baby_frames[int(b["spin"]) % 4] if b["st"] in ("roll", "fall") else self.baby_frames[0]
-            if b["st"] == "crawl" and int(self.timer * 6) % 2:
-                img = c.flip(img)
-            surf.blit(img, (int(b["x"]) - 6, int(b["y"]) - 12))
+            bx, by = int(b["x"]), int(b["y"])
+            if b["st"] == "crawl":
+                if int(self.timer * 6) % 2:
+                    img = c.flip(img)
+                bx += int(math.sin(self.timer * 50) * 1.5)      # twitching
+                self.glow(surf, bx, by - 6, 9, (255, 30, 30), 70)
+            else:
+                self.glow(surf, bx, by - 6, 7, (255, 30, 30), 35)
+            surf.blit(img, (bx - 6, by - 12))
         self.draw_player(surf)
+        self.draw_dark(surf)
         for x, y, m, t in self.pops:
             text(surf, m, (int(x), int(y)), 16, c.YELLOW, center=True)
         text(surf, "%d" % int(self.score), (6, 2), 18, c.WHITE)
@@ -390,14 +428,47 @@ class ScaryBabies(Game):
         if self.state_p == "cleared":
             text(surf, "BOARD CLEAR!", (W // 2, 96), 34, c.YELLOW, center=True)
 
+    def glow(self, surf, x, y, r, col, alpha):
+        g = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        for k in range(3):
+            pygame.draw.circle(g, col + (alpha // 3,), (r, r), int(r * (1 - k * 0.3)))
+        surf.blit(g, (x - r, y - r))
+
+    def draw_dark(self, surf):
+        """A vignette, the stuttering lights, and a red flash when Stephen gets got."""
+        if not hasattr(self, "_vignette"):
+            v = pygame.Surface((W, H), pygame.SRCALPHA)
+            for i in range(16):
+                a = int(10 * i)
+                pygame.draw.rect(v, (0, 0, 0, max(0, 150 - a)), (i * 4, i * 3, W - i * 8, H - i * 6), 4)
+            self._vignette = v
+        surf.blit(self._vignette, (0, 0))
+        if self.flicker > 0 and int(self.flicker * 18) % 3 != 0:
+            shade = pygame.Surface((W, H), pygame.SRCALPHA)
+            shade.fill((0, 0, 0, 165))
+            surf.blit(shade, (0, 0))
+            for b in self.babies:                # in the dark you only see their eyes
+                for ex in (-2, 2):
+                    pygame.draw.circle(surf, (255, 40, 40), (int(b["x"]) + ex, int(b["y"]) - 7), 1)
+            bx, by = BOSS_X, int(GIRDERS[4].y_at(BOSS_X)) - self.boss.get_height() + 13
+            for ex in (-7, 7):
+                pygame.draw.circle(surf, (255, 40, 40), (bx + ex, by), 2)
+        if self.redflash > 0:
+            f = pygame.Surface((W, H), pygame.SRCALPHA)
+            f.fill((160, 0, 10, int(160 * self.redflash / 0.5)))
+            surf.blit(f, (0, 0))
+
     def draw_boss(self, surf):
         feet = GIRDERS[4].y_at(BOSS_X)
         bob = int(math.sin(self.timer * 6) * 1)
         bx, by = BOSS_X - 22, int(feet) - self.boss.get_height() + bob
+        for ex in (-7, 7):                       # eyes that glow
+            self.glow(surf, BOSS_X + ex, by + 13, 6, (255, 30, 30), 90)
         surf.blit(self.boss, (bx, by))
         if self.hold > 0:   # baby held over the head
             surf.blit(self.baby_frames[0], (BOSS_X - 6, by - 10))
-            text(surf, "WAAAH!", (BOSS_X + 4, by - 26), 16, (255, 120, 120), center=True)
+            line = ("hee hee hee...", "PLAY WITH US!", "WAAAH!")[int(self.timer / 3) % 3]
+            text(surf, line, (BOSS_X + 18, by - 26), 16, (255, 90, 90), center=True)
 
     def draw_player(self, surf):
         if self.state_p == "dying":

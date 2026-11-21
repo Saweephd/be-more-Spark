@@ -156,6 +156,9 @@ def _effects():
         "turbo":    lambda: mix(tone(150, 0.5, sq, 0.5, 0.18, slide=600), tone(2500, 0.5, nz, vol=0.12)),
         "skid":     lambda: tone(4200, 0.25, nz, vol=0.16, decay=0.12),
         "scrape":   lambda: tone(2600, 0.12, nz, vol=0.14, decay=0.05),
+        "giggle":   lambda: chain(*[mix(tone(f, 0.11, "square", 0.5, 0.12, slide=f * 0.8, vibrato=25),
+                                        tone(f * 2.01, 0.11, "triangle", vol=0.05)) if f else rest(0.05)
+                                    for f in (1180, 0, 1060, 0, 960, 0, 1250, 0, 820)]),
         "cry":      lambda: chain(tone(620, 0.22, sq, 0.25, 0.22, slide=480, vibrato=11), tone(700, 0.35, sq, 0.25, 0.22, slide=420, vibrato=11)),
         "throw":    lambda: chain(tone(300, 0.08, sq, 0.5, 0.25, slide=180), tone(5000, 0.1, nz, vol=0.12, decay=0.05)),
         "bonk":     lambda: mix(tone(240, 0.1, tri, vol=0.5, slide=120), tone(1800, 0.06, nz, vol=0.2)),
