@@ -43,6 +43,19 @@ LOADS = [
 CAR_COLORS = ((220, 60, 60), (70, 130, 230), (250, 210, 60), (120, 200, 120), (200, 90, 200), (240, 150, 40))
 WALK = 78.0
 PENO = "Is that Peno!?!!!"
+# Black Warrior and Momma Rose wait in the pickup, and they have places to be.
+HECKLES = (
+    ("Black Warrior", "Hurry up, I gotta go to a community meeting!"),
+    ("Momma Rose", "Yeah, I wanna go play mahjong!"),
+    ("Black Warrior", "The city is not going to save itself!"),
+    ("Momma Rose", "My mahjong tiles are getting cold!"),
+    ("Black Warrior", "Lift with your legs!"),
+    ("Momma Rose", "Careful with that lamp, it was my mother's!"),
+    ("Black Warrior", "I could carry that with one hand. I won't. But I could."),
+    ("Momma Rose", "You two are doing great. Faster, but great."),
+    ("Black Warrior", "Look both ways! Then look again!"),
+    ("Momma Rose", "Did somebody feed Peno?"),
+)
 
 
 class BigMove(Game):
@@ -92,6 +105,7 @@ class BigMove(Game):
         self.cats = []
         self.lane_t = {}
         self.cat_t = 1.0
+        self.heckle, self.heckle_t, self.heckle_i = None, 5.0, 0
         self.load_time = 0.0
         self.carry_time = 0.0
         self.phase, self.pt = "play", 0.0
@@ -126,6 +140,14 @@ class BigMove(Game):
                     self.game_over()
             return
         self.load_time += dt
+        self.heckle_t -= dt                           # the two in the truck keep things moving
+        if self.heckle_t <= 0:
+            if self.heckle is None:
+                self.heckle = HECKLES[self.heckle_i % len(HECKLES)]
+                self.heckle_i += 1
+                self.heckle_t = 3.2
+            else:
+                self.heckle, self.heckle_t = None, self.rng.uniform(6.0, 10.0)
         if self.banner:
             self.banner = (self.banner[0], self.banner[1] - dt) if self.banner[1] > dt else None
         p2 = getattr(inp, "p2", None)
@@ -381,6 +403,10 @@ class BigMove(Game):
                 art.bubble(surf, p["say"], p["x"] + 30, p["y"] - 52)
             elif (not p["carry"] and TRUCK.collidepoint(p["x"], p["y"]) and self.truck_items and int(self.time * 3) % 2):
                 text(surf, "Big button: grab!", (int(p["x"]) + 46, int(p["y"]) - 44), 14, c.YELLOW, center=True)
+        if self.heckle and self.phase == "play":
+            who, line = self.heckle
+            art.bubble(surf, line, TRUCK_X + 36, 192)
+            text(surf, who, (TRUCK_X + 36, 176), 12, (255, 220, 110), center=True)
         text(surf, "SCORE %d" % int(self.score), (6, 226), 14, c.WHITE)
         left = len(self.truck_items) + len(self.dropped) + sum(1 for p in self.players if p["carry"])
         text(surf, "LOAD %d  %d to go" % (self.load_i + 1, left), (W // 2 + 30, 226), 14, (250, 220, 90), center=True)

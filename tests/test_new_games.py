@@ -92,6 +92,23 @@ def mover_bot(g, p):
 
 @unittest.skipUnless(HAVE_PYGAME, "pygame not installed")
 class BigMove(unittest.TestCase):
+    def test_the_truck_crew_heckles(self):
+        g = bm.make(seed=2, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        inp = common.Input()
+        inp.pressed = {"a"}
+        g.step(1 / 60, inp)
+        inp.pressed = set()
+        g.phase, g.pt = "play", 0.0
+        heard = set()
+        for _ in range(60 * 40):
+            g.step(1 / 60, inp)
+            if g.heckle:
+                heard.add(g.heckle)
+        said = " ".join(line for _, line in heard)
+        self.assertIn("community meeting", said)
+        self.assertIn("mahjong", said)
+        self.assertEqual({who for who, _ in heard}, {"Black Warrior", "Momma Rose"})
+
     def setUp(self):
         self.scores = tempfile.mktemp(suffix=".json")
         self.canvas = pygame.Surface((common.W, common.H))

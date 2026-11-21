@@ -116,6 +116,77 @@ def face_surface(rage):
     return s
 
 
+_tub = {}
+
+
+def tub_man(mood):
+    """Uncle T from the chest up, lounging in the hot tub: calm, on the phone, or furious. 320 x 150."""
+    if mood in _tub:
+        return _tub[mood]
+    from .alien_storm import art as hd
+    poly, oval, line = hd.poly, hd.oval, hd.line
+    s = pygame.Surface((320 * hd.SS, 150 * hd.SS), pygame.SRCALPHA)
+    cx = 160.0
+    skin = SKIN if mood != "angry" else (232, 150, 120)
+    dark = SKIN_D if mood != "angry" else (196, 110, 86)
+    # arms stretched out along the edge of the tub, or one bent up holding the phone
+    poly(s, skin, [(cx - 34, 92), (cx - 110, 100), (cx - 128, 108), (cx - 126, 118), (cx - 104, 116), (cx - 34, 112)])
+    oval(s, skin, (cx - 142, 102, 22, 16))
+    for k in range(3):
+        line(s, dark, (cx - 138 + k * 5, 106), (cx - 138 + k * 5, 114), 0.7)
+    if mood == "calm":
+        poly(s, skin, [(cx + 34, 92), (cx + 110, 100), (cx + 128, 108), (cx + 126, 118), (cx + 104, 116), (cx + 34, 112)])
+        oval(s, skin, (cx + 120, 102, 22, 16))
+        poly(s, (240, 240, 250), [(cx + 122, 84), (cx + 140, 84), (cx + 137, 104), (cx + 125, 104)])      # a cold drink
+        poly(s, (250, 170, 60), [(cx + 123.5, 90), (cx + 138.5, 90), (cx + 137, 103), (cx + 125, 103)])
+        line(s, (230, 60, 60), (cx + 134, 78), (cx + 130, 96), 0.9)
+    else:
+        poly(s, skin, [(cx + 34, 94), (cx + 62, 104), (cx + 70, 96), (cx + 54, 60), (cx + 40, 62), (cx + 44, 86)])   # bent arm
+        oval(s, skin, (cx + 36, 46, 20, 22))
+        poly(s, (30, 30, 34), [(cx + 30, 36), (cx + 42, 36), (cx + 42, 66), (cx + 30, 66)])                # the phone
+        poly(s, (140, 200, 255), [(cx + 32, 39), (cx + 40, 39), (cx + 40, 62), (cx + 32, 62)])
+        for k in range(4):
+            line(s, dark, (cx + 40, 50 + k * 4), (cx + 50, 50 + k * 4), 0.7)
+    # chest and shoulders
+    poly(s, skin, [(cx - 44, 150), (cx - 46, 100), (cx - 34, 88), (cx - 12, 82), (cx + 12, 82), (cx + 34, 88), (cx + 46, 100), (cx + 44, 150)])
+    line(s, dark, (cx - 26, 92), (cx - 6, 96), 0.9, mirror=cx)                                           # collar bones
+    line(s, dark, (cx, 104), (cx, 132), 0.8)
+    poly(s, dark, [(cx - 30, 112), (cx - 6, 116), (cx - 6, 118), (cx - 30, 115)], mirror=cx)
+    for k in range(7):                                                                                   # a little chest hair
+        oval(s, (120, 100, 90), (cx - 12 + (k * 7) % 24, 100 + (k * 5) % 12, 1.6, 1.6))
+    # neck and bald head
+    poly(s, dark, [(cx - 12, 62), (cx + 12, 62), (cx + 14, 86), (cx - 14, 86)])
+    oval(s, skin, (cx - 25, 8, 50, 62))
+    oval(s, skin, (cx - 30, 34, 9, 15), mirror=cx)                                                       # ears
+    oval(s, dark, (cx - 28, 38, 4, 8), mirror=cx)
+    oval(s, (255, 240, 220), (cx - 14, 12, 16, 9))                                                       # the shine on top
+    poly(s, (110, 100, 96), [(cx - 25, 34), (cx - 21, 22), (cx - 19, 34), (cx - 22, 44)], mirror=cx)     # grey at the sides
+    # wraparound sunglasses
+    poly(s, (16, 16, 22), [(cx - 25, 32), (cx + 25, 32), (cx + 23, 44), (cx + 4, 46), (cx, 40), (cx - 4, 46), (cx - 23, 44)])
+    poly(s, (70, 90, 130), [(cx - 21, 34), (cx - 10, 34), (cx - 18, 41)])
+    poly(s, (70, 90, 130), [(cx + 6, 34), (cx + 15, 34), (cx + 8, 41)])
+    brow = 5 if mood == "angry" else (-2 if mood == "phone" else 0)
+    line(s, (90, 80, 76), (cx - 22, 29 - brow * 0.3), (cx - 6, 29 + brow), 1.6)
+    line(s, (90, 80, 76), (cx + 22, 29 - brow * 0.3), (cx + 6, 29 + brow), 1.6)
+    poly(s, dark, [(cx - 1, 42), (cx - 5, 53), (cx + 5, 53)])                                            # nose
+    if mood == "calm":
+        line(s, (130, 70, 60), (cx - 9, 59), (cx + 9, 59), 1.2)
+        line(s, (130, 70, 60), (cx + 9, 59), (cx + 12, 57), 1.0)
+    elif mood == "phone":
+        oval(s, (90, 40, 40), (cx - 4, 56, 8, 6))
+    else:
+        poly(s, (70, 24, 26), [(cx - 12, 55), (cx + 12, 55), (cx + 9, 67), (cx - 9, 67)])
+        poly(s, (255, 255, 255), [(cx - 10, 56), (cx + 10, 56), (cx + 9, 59), (cx - 9, 59)])
+        poly(s, (220, 100, 110), [(cx - 5, 64), (cx + 5, 64), (cx + 4, 66.5), (cx - 4, 66.5)])
+        for sx in (-1, 1):                                                                               # a vein and steam from the ears
+            line(s, (190, 60, 60), (cx + sx * 12, 14), (cx + sx * 16, 20), 0.8)
+            line(s, (190, 60, 60), (cx + sx * 16, 20), (cx + sx * 13, 24), 0.8)
+            oval(s, (245, 245, 245), (cx + sx * 36 - 5, 26, 10, 8))
+            oval(s, (245, 245, 245), (cx + sx * 44 - 4, 18, 8, 7))
+    _tub[mood] = out = pygame.transform.smoothscale(s, (320, 150))
+    return out
+
+
 def bubble(surf, msg, x, y, size=16):
     font = pygame.font.Font(None, size)
     img = font.render(msg, False, c.INK)
@@ -706,22 +777,27 @@ class UncleT(Game):
         surf.fill((120, 80, 50))                                     # deck
         for y in range(0, H, 12):
             pygame.draw.line(surf, (100, 66, 40), (0, y), (W, y))
-        pygame.draw.rect(surf, (180, 180, 190), (90, 50, 220, 150), border_radius=24)   # tub
+        pygame.draw.rect(surf, (150, 150, 162), (86, 50, 228, 156), border_radius=26)   # tub
+        pygame.draw.rect(surf, (190, 190, 202), (90, 50, 220, 150), border_radius=24)
         pygame.draw.rect(surf, (70, 170, 210), (102, 62, 196, 126), border_radius=18)   # water
+        pygame.draw.rect(surf, (110, 200, 232), (110, 68, 180, 10), border_radius=5)
         for i in range(14):                                          # bubbles
             bx = 110 + (i * 37 + int(t * 40)) % 180
             by = 180 - (i * 53 + int(t * 30)) % 110
             pygame.draw.circle(surf, (210, 240, 255), (bx, by), 2 + i % 3)
-        jump = max(0.0, t - 7.6) * 220                               # leaps out at the end
+        jump = max(0.0, t - 7.6) * 260                               # leaps out at the end
+        mood = "calm" if t < 2.0 else ("phone" if t < 5.6 else "angry")
+        fig = tub_man(mood)
         hx, hy = 200, int(96 - jump)
-        pygame.draw.rect(surf, SKIN, (hx - 24, hy + 52, 48, 30), border_radius=8)          # skinny shoulders
-        surf.blit(self.big_face, (hx - 39, hy - 20))
-        if 2.0 < t < 7.6:                                            # phone
-            shake = int(math.sin(t * 40) * 2) if t < 3.6 else 0
-            pygame.draw.rect(surf, (30, 30, 34), (hx + 30 + shake, hy + 30, 12, 22), border_radius=2)
-            pygame.draw.rect(surf, (140, 200, 255), (hx + 32 + shake, hy + 32, 8, 16))
-            if t < 3.6:
-                text(surf, "RING! RING!", (hx + 46, hy + 22), 18, c.YELLOW)
+        bobble = int(math.sin(t * 2) * 1.5) if mood == "calm" else (int(math.sin(t * 50) * 1.5) if mood == "angry" else 0)
+        surf.blit(fig, (40 + bobble, 28 - int(jump)))
+        if jump <= 0:                                                # the water closes round his chest
+            pygame.draw.ellipse(surf, (70, 170, 210), (106, 150, 188, 44))
+            for k in range(7):
+                wx = 122 + k * 24 + int(math.sin(t * 3 + k) * 3)
+                pygame.draw.arc(surf, (210, 240, 255), (wx, 146, 20, 8), 0.2, 2.9, 1)
+        if 2.0 < t < 3.6:
+            text(surf, "RING! RING!", (hx + 66, hy - 30), 18, c.YELLOW)
         for i in range(3):                                           # steam
             sy = 40 - (int(t * 20) + i * 15) % 40
             pygame.draw.circle(surf, (230, 230, 230), (130 + i * 70, sy), 6)
@@ -732,7 +808,7 @@ class UncleT(Game):
         elif t < 5.6:
             self.textbox(surf, ["Unknown caller:", "\"Come check out the new iPhone!\""])
         elif t < 7.6:
-            bubble(surf, "#@%&! $#@!& %@#... ALICE!!", hx - 70, hy - 50, 18)
+            bubble(surf, "#@%&! ALICE! I'M IN THE #@%&! HOT TUB!", hx - 132, hy - 62, 18)
         else:
             self.textbox(surf, ["Uncle T heads for the car..."])
         if int(t * 2) % 2 == 0:
