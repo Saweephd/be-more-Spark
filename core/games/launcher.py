@@ -41,7 +41,7 @@ class Menu:
             self.index = (self.index - 1) % len(self.games)
             self.sound.play("move")
         if inp.touch is not None and "a" in inp.pressed:
-            row = (inp.touch[1] - 78) // 34
+            row = (inp.touch[1] // 2 - 42) // 23
             if 0 <= row < len(self.games):
                 self.index = row
         if "a" in inp.pressed or "start" in inp.pressed:
@@ -58,13 +58,13 @@ class Menu:
         text(surf, "GAMES", (W // 2, 12), 40, c.YELLOW, center=True)
         scores = c.load_scores(self.scores_path)
         for i, (name, title) in enumerate(self.games):
-            y = 50 + i * 28
+            y = 42 + i * 23
             sel = i == self.index
-            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 25), border_radius=4)
-            text(surf, title, (64, y + 5), 22, c.INK if sel else c.WHITE, shadow=not sel)
-            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 7), 18, c.INK if sel else (170, 210, 210), shadow=False)
+            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 21), border_radius=4)
+            text(surf, title, (64, y + 3), 20, c.INK if sel else c.WHITE, shadow=not sel)
+            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 5), 16, c.INK if sel else (170, 210, 210), shadow=False)
         if self.message:
-            text(surf, self.message, (W // 2, 196), 18, c.WHITE, center=True)
+            text(surf, self.message, (W // 2, 206), 16, c.WHITE, center=True)
         text(surf, "D-pad: choose   Big button: play   Triangle: back", (W // 2, 220), 16, c.WHITE, center=True)
 
 

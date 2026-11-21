@@ -140,6 +140,19 @@ def _effects():
         "boom":     lambda: mix(tone(600, 0.5, nz, vol=0.42, decay=0.16), tone(90, 0.45, tri, vol=0.55, slide=35)),
         "drone":    lambda: mix(tone(70, 1.6, sq, 0.5, 0.16, vibrato=4), tone(105, 1.6, sq, 0.5, 0.08)),
         "whoosh":   lambda: tone(2000, 0.5, nz, vol=0.2, decay=0.3),
+        # Black Warrior
+        "punch":    lambda: mix(tone(180, 0.07, sq, 0.5, 0.3, slide=90), tone(2200, 0.05, nz, vol=0.26, decay=0.03)),
+        "kick":     lambda: mix(tone(140, 0.1, sq, 0.5, 0.32, slide=60), tone(1600, 0.07, nz, vol=0.28, decay=0.04)),
+        "whiff":    lambda: tone(3500, 0.08, nz, vol=0.12, decay=0.05),
+        "thud":     lambda: mix(tone(90, 0.22, tri, vol=0.6, slide=40), tone(600, 0.14, nz, vol=0.25, decay=0.06)),
+        "grab":     lambda: tone(220, 0.06, sq, 0.25, 0.22, slide=260),
+        "bark":     lambda: chain(mix(tone(520, 0.07, sq, 0.5, 0.3, slide=300), tone(900, 0.05, nz, vol=0.2)), rest(0.06),
+                                  mix(tone(560, 0.09, sq, 0.5, 0.32, slide=320), tone(900, 0.06, nz, vol=0.2))),
+        "mask":     lambda: chain(tone(1200, 0.05, sq, 0.125, 0.18, slide=2400), tone(2600, 0.12, tri, vol=0.3, decay=0.1)),
+        "rift":     lambda: mix(tone(80, 1.2, sq, 0.5, 0.22, slide=160, vibrato=6), tone(4000, 1.0, nz, vol=0.08, decay=0.8)),
+        "slash":    lambda: chain(tone(6000, 0.18, nz, vol=0.3, decay=0.08), tone(1800, 0.3, tri, vol=0.4, slide=3600, decay=0.2)),
+        "ding":     lambda: chain(tone(1568, 0.12, tri, vol=0.4, decay=0.1), tone(1319, 0.3, tri, vol=0.4, decay=0.25)),
+        "special":  lambda: chain(*[tone(note_freq(n), 0.04, sq, 0.25, 0.26) for n in ("E5", "B5", "E6", "G#6", "B6", "E7")]),
         "orders":   lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.25) for n, d in (("G4", 0.12), ("C5", 0.12), ("E5", 0.12), ("G5", 0.36))]),
         "over":     lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in (("G4", 0.16), ("E4", 0.16), ("C4", 0.16), ("G3", 0.45))]),
         "win":      lambda: chain(*[tone(note_freq(n), d, sq, 0.5, 0.3) for n, d in
@@ -219,6 +232,28 @@ TUNES = {
         "lead": "D5:1 D5:1 R:1 D5:1 F5:1 E5:1 D5:1 C5:1 D5:1 D5:1 R:1 D5:1 G5:1 F5:1 E5:1 C#5:1 " * 2,
         "rbass": "D2:1 D3:1 D2:1 D3:1 D2:1 D3:1 C3:1 C#3:1 " * 4,
         "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 S:1 " * 4,
+    }),
+    # Black Warrior: a funky street groove in E minor, then the boss and the city waking up.
+    "black_warrior": (112, 4, {
+        "lead": "E5:2 R:1 E5:1 G5:2 A5:2 B5:3 A5:1 G5:2 E5:2 D5:2 E5:2 G5:2 R:2 R:4 "
+                "E5:2 R:1 E5:1 G5:2 A5:2 B5:3 D6:1 B5:2 A5:2 G5:2 A5:2 E5:4 R:4",
+        "rbass": "E2:2 R:1 E2:1 R:2 E3:1 E2:1 G2:2 R:1 G2:1 A2:2 B2:2 " * 2
+                 + "C3:2 R:1 C3:1 R:2 C3:1 B2:1 A2:2 R:1 A2:1 B2:2 D3:2 "
+                 "E2:2 R:1 E2:1 R:2 E3:1 E2:1 G2:2 A2:2 B2:2 D3:2",
+        "chord": "R:2 E4+G4:1 R:3 E4+G4:1 R:1 R:2 D4+F#4:1 R:3 D4+F#4:1 R:1 " * 4,
+        "drum": "K:2 H:2 S:2 H:1 K:1 H:2 K:2 S:2 H:2 " * 4,
+    }),
+    "bw_boss": (138, 4, {
+        "lead": "E5:2 F5:2 E5:2 B4:2 C5:2 B4:2 G4:4 E5:2 F5:2 E5:2 B4:2 D5:2 C5:2 B4:4 " * 2,
+        "rbass": "E2:1 E2:1 E3:1 E2:1 F2:1 F2:1 F3:1 F2:1 " * 8,
+        "chord": "E3+B3:2 R:2 E3+B3:2 R:2 F3+C4:2 R:2 F3+C4:2 R:2 " * 4,
+        "drum": "K:1 H:1 S:1 H:1 K:1 K:1 S:1 H:1 " * 8,
+    }),
+    "bw_reform": (96, 2, {
+        "lead": "G5:2 A5:2 B5:2 D6:2 C6:3 B5:1 A5:4 G5:2 A5:2 B5:2 G5:2 E6:4 D6:4 "
+                "C6:2 B5:2 A5:2 G5:2 A5:3 B5:1 G5:4 E5:2 F#5:2 G5:4 R:4",
+        "bass": "G2:4 D3:4 C3:4 G3:4 G2:4 D3:4 C3:4 D3:4 C3:4 G2:4 D3:4 A2:4 C3:4 D3:4 G2:8",
+        "drum": "K:2 H:2 S:2 H:2 " * 8,
     }),
     # Hot tub lounge: slow and smooth, until the phone rings.
     "hottub": (88, 2, {
