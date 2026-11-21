@@ -70,6 +70,11 @@ def match_tv(text):
     return None
 
 
+def match_screensaver(text):
+    t = _norm(text)
+    return bool(re.search(r"\b(start|show|turn on|put on|go to|play)\b.*\bscreen ?saver\b|\bscreen ?saver (on|now|please)\b", t))
+
+
 def match_yes(text):
     return bool(re.search(r"\b(yes|yeah|yep|yup|sure|do it|please do|go ahead|i'?m sure|affirmative|correct|ok|okay)\b", _norm(text)))
 

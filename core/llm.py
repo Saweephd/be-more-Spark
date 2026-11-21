@@ -603,6 +603,12 @@ class Brain:
                 self.history.append({"role": "assistant", "content": line})
                 yield line
                 return
+            if extras.match_screensaver(user_text):
+                line = "Okay! Screen saver time."
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield '{"action": "screensaver"}'
+                return
             tv = extras.match_tv(user_text)
             if tv:
                 line = "BMO is going on the big screen!" if tv == "on" else "BMO is back!"

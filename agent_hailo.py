@@ -58,6 +58,9 @@ VISION_ENABLED = False
 # 2. GUI & STATE
 # =========================================================================
 
+SAVER_FLAG = "/tmp/bmo_screensaver_now"
+
+
 class BotStates:
     IDLE = "idle"
     LISTENING = "listening"
@@ -964,6 +967,13 @@ class BotGUI:
             self.last_mood_change = now
             print(f"[MOOD] BMO is now feeling: {self.current_mood}")
 
+        # Screensaver on request: "bmo-ctl.sh saver-now" or "BMO, start the screen saver" leaves this flag
+        if os.path.exists(SAVER_FLAG):
+            try: os.remove(SAVER_FLAG)
+            except OSError: pass
+            if self.current_state == BotStates.IDLE:
+                self._saver_scan = 0.0
+                self.set_state(BotStates.SCREENSAVER, "Screensaver...")
         # Screensaver Auto-Trigger
         if self.current_state == BotStates.IDLE and (now - self.last_state_change) > SCREENSAVER_AFTER_SECONDS:
             self.set_state(BotStates.SCREENSAVER, "Screensaver...")
@@ -1721,6 +1731,13 @@ class BotGUI:
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") == "shutdown":
                 self.shutdown_device()
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "screensaver":
+                def saver_later():
+                    self._wait_until_idle({BotStates.SPEAKING, BotStates.THINKING}, timeout_s=20)
+                    time.sleep(1.5)
+                    open(SAVER_FLAG, "w").close()
+                threading.Thread(target=saver_later, daemon=True).start()
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") in ("tv_on", "tv_off"):
                 self.tv_cast(action_data.get("action") == "tv_on")
