@@ -401,7 +401,13 @@ def open_screen():
     pygame.display.init()
     pygame.font.init()
     flags = 0 if os.environ.get("BMO_GAME_WINDOWED") else pygame.FULLSCREEN
-    screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags)
+    second = 0
+    if os.path.exists("/tmp/bmo_streaming") and pygame.display.get_num_displays() > 1:
+        second = 1                                   # a TV stream is running: play on the screen the TV shows
+    try:
+        screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags, display=second)
+    except pygame.error:
+        screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags)
     pygame.mouse.set_visible(False)
     return screen
 

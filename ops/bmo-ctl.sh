@@ -234,6 +234,7 @@ main() {
         music)           runpy ops/bmo_music.py list;;
         music-import)    [ -n "${1:-}" ] || { echo 'music-import: give a folder'; exit 2; }; runpy ops/bmo_music.py import "$1";;
         wifi)            runpy ops/bmo_wifi.py "$@";;
+        stream)          runpy ops/bmo_stream.py "$@";;
         saver)           runpy ops/bmo_saver.py list;;
         saver-now)       touch /tmp/bmo_screensaver_now; echo "screen saver starts as soon as BMO is idle";;
         saver-import)    [ -n "${1:-}" ] || { echo 'saver-import: give a folder'; exit 2; }; runpy ops/bmo_saver.py import "$1";;
