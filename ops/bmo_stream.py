@@ -128,26 +128,77 @@ def set_conf(index):
     json.dump(apps, open(APPS, "w"))
 
 
+LOG = os.path.join(HOME, ".config", "sunshine", "sunshine.log")
+READY = "/tmp/bmo_stream_ready"             # written once Sunshine is known to be looking at the right screen
+
+
+def start_sunshine():
+    sh(["systemctl", "--user", "stop", UNIT])
+    sh(["systemctl", "--user", "reset-failed", UNIT])
+    r = sh(["systemd-run", "--user", "--unit=" + UNIT, "--setenv=WAYLAND_DISPLAY=" + ENV["WAYLAND_DISPLAY"],
+            "--setenv=DISPLAY=:0", "/usr/bin/sunshine"])
+    time.sleep(4)
+    return r
+
+
+def sunshine_order():
+    """The screens in the order Sunshine numbers them, read from its own log (newest listing)."""
+    try:
+        names = re.findall(r"\[wayland\] Name: (\S+)", open(LOG, errors="replace").read())
+    except OSError:
+        return []
+    out = []
+    for n in reversed(names):                       # walk back until the listing starts to repeat
+        if n in out:
+            break
+        out.insert(0, n)
+    return out
+
+
+def tv_first():
+    """Sunshine honours the chosen screen when it starts, but falls back to its first screen once a TV
+    connects. Screens are numbered in the order they were made, so switch BMO's panel off and on again:
+    that makes the panel the newest, and the TV screen the first."""
+    sh(["wlr-randr", "--output", PANEL, "--off"])
+    time.sleep(1.0)
+    sh(["wlr-randr", "--output", PANEL, "--on", "--pos", "0,0", "--transform", "180"])
+    time.sleep(1.0)
+    sh(["wlr-randr", "--output", TV, "--pos", "800,0"])
+
+
 def up():
-    if TV in outputs() and sh(["systemctl", "--user", "is-active", UNIT]).stdout.strip() == "active" \
-            and not os.path.exists(FLAG) and "output_name" in open(CONF).read():
+    if os.path.exists(READY) and TV in outputs() and not os.path.exists(FLAG) \
+            and sh(["systemctl", "--user", "is-active", UNIT]).stdout.strip() == "active":
         print("second screen: ready, BMO's own screen will stay upright")
         print("sunshine: already running")
         return 0
-    sh(["systemctl", "--user", "stop", UNIT])
-    sh(["systemctl", "--user", "reset-failed", UNIT])
+    if os.path.exists(READY):
+        os.remove(READY)
     ok = make_screen()
-    names = outputs()
-    # Sunshine numbers screens in the order they were made, so the new one is always last
-    set_conf(len(names) - 1 if ok else None)
-    r = sh(["systemd-run", "--user", "--unit=" + UNIT, "--setenv=WAYLAND_DISPLAY=" + ENV["WAYLAND_DISPLAY"],
-            "--setenv=DISPLAY=:0", "/usr/bin/sunshine"])
+    set_conf(0 if ok else None)
+    r = start_sunshine()
+    if ok:
+        order = sunshine_order()
+        if order[:1] != [TV]:
+            tv_first()
+            r = start_sunshine()
+            order = sunshine_order()
+        ok = order[:1] == [TV]
+        if ok:
+            open(READY, "w").write("1")
+        else:                                       # could not make it first: stream the real screen, the old way
+            drop_screen()
+            set_conf(None)
+            r = start_sunshine()
+        print("sunshine sees: %s" % ", ".join(order))
     print("second screen: %s" % ("ready, BMO's own screen will stay upright" if ok else "NOT available, streams will use the old way"))
     print("sunshine: %s" % ("started" if r.returncode == 0 else r.stderr.strip()))
     return 0 if r.returncode == 0 else 1
 
 
 def down():
+    if os.path.exists(READY):
+        os.remove(READY)
     sh(["systemctl", "--user", "stop", UNIT])
     end()
     drop_screen()
