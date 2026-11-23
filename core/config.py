@@ -127,11 +127,11 @@ WAKE_WORD_MODEL = os.path.join(_PROJECT_ROOT, "wakeword.onnx")
 WAKE_WORD_THRESHOLD = 0.12
 
 # How much louder than the room a sound must be to count as speech while BMO records a question.
-# 1.6 since 23 Nov 2026 (was 2.5): in the closed case, with the fan running, the room measured about 270
-# and a spoken question only 420 to 630 with the microphone already at full gain, so 2.5 times the
-# room (about 700) threw every question away as "no speech".
-SPEECH_FACTOR = float(os.environ.get("BMO_SPEECH_FACTOR", "1.6"))
-MIN_SPEECH_RMS = float(os.environ.get("BMO_MIN_SPEECH_RMS", "350"))
+# 2.0 since 23 Nov 2026 (was 2.5). In the closed case with the fan running the room measures about 270
+# and its own peaks reach 420 to 460 with nobody speaking, so the level must stay clear of those:
+# 1.6 (tried the same day) sat right on top of the room's peaks. Real speech levels still to be measured.
+SPEECH_FACTOR = float(os.environ.get("BMO_SPEECH_FACTOR", "2.0"))
+MIN_SPEECH_RMS = float(os.environ.get("BMO_MIN_SPEECH_RMS", "400"))
 
 # Robustly find Audio Devices
 def find_audio_devices():
