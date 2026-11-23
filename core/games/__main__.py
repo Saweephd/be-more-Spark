@@ -17,6 +17,10 @@ def main(argv):
         res = launcher.run_menu()
     elif name in GAMES:
         res = common.run(load(name))
+        if res.get("home"):                           # the home button asks for the games menu
+            from . import launcher
+            last = launcher.run_menu()
+            res = last if last.get("game") else res
     else:
         print("Unknown game: %s. Choices: menu, %s" % (name, ", ".join(GAMES)), file=sys.stderr)
         return 2

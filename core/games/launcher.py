@@ -60,8 +60,8 @@ class Menu:
         if "a" in inp.pressed or "start" in inp.pressed:
             self.choice = self.games[self.index][0]
             self.sound.play("select")
-        if "b" in inp.pressed:
-            self.done = True
+        if "back" in inp.pressed:                    # the minus (select) button; the triangle no longer leaves,
+            self.done = True                          # because it was pressed by accident too often
             self.sound.play("back")
 
     def render(self, surf):
@@ -84,7 +84,7 @@ class Menu:
         note = tvmode.hint() or self.message
         if note:
             text(surf, note, (W // 2, 208), 14, c.YELLOW if tvmode.hint() else c.WHITE, center=True)
-        text(surf, "Up/down: choose  Left/right: TV  Big button: play", (W // 2, 224), 16, c.WHITE, center=True)
+        text(surf, "Big button: play   Minus, or hold small button: leave", (W // 2, 224), 16, c.WHITE, center=True)
 
 
 def run_menu(screen=None, max_frames=None):

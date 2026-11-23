@@ -348,6 +348,30 @@ class GameTests(unittest.TestCase):
         self.assertEqual(menu.choice, "bmo_catch")
         menu.render(self.canvas)
 
+    def test_triangle_no_longer_leaves_the_menu_but_minus_does(self):
+        menu = launcher.Menu(scores_path=self.scores)
+        inp = common.Input()
+        inp.down("b")
+        menu.step(DT, inp)
+        self.assertFalse(menu.done)
+        inp.end_frame()
+        inp.down("back")
+        menu.step(DT, inp)
+        self.assertTrue(menu.done)
+
+    def test_home_button_leaves_a_game_at_once(self):
+        screen = pygame.display.get_surface()
+        pads = common.Pads({"a": [0], "b": [1], "start": [11], "back": [15], "home": [16]})
+        self.assertEqual((pads.button_name(16), pads.button_name(15), pads.button_name(11)), ("home", "back", "start"))
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+        res = common.run(bmo_catch.make(seed=1, scores_path=self.scores), screen=screen, max_frames=5)
+        self.assertFalse(res["home"])
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "pad.json")
+            open(path, "w").write('{"a": [0, 4], "home": [16]}')
+            m = common.load_pad_map(path)
+            self.assertEqual((m["a"], m["home"], m["start"]), ([0, 4], [16], common.DEFAULT_PAD["start"]))
+
     def test_run_loop_returns_a_result(self):
         screen = pygame.display.get_surface()
         res = common.run(mazee_run.make(seed=1, scores_path=self.scores), screen=screen, max_frames=5)

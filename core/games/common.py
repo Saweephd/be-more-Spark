@@ -42,7 +42,8 @@ KEYMAP = {
 
 PAD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pad.json")
 # Button numbers differ between gamepads; these cover the common layouts. pad.json can override them.
-DEFAULT_PAD = {"a": [0, 2], "b": [1, 3], "start": [6, 7, 9, 10, 11]}
+# "home" leaves a game for the games menu; "back" (minus, select or view) leaves the menu.
+DEFAULT_PAD = {"a": [0, 2], "b": [1, 3], "start": [6, 7, 9, 10, 11], "home": [], "back": []}
 AXIS_ON, AXIS_OFF = 0.55, 0.35
 
 
@@ -50,7 +51,9 @@ def load_pad_map(path=None):
     try:
         with open(path or PAD_FILE) as fh:
             data = json.load(fh)
-        return {k: [int(x) for x in v] for k, v in data.items() if k in ("a", "b", "start")}
+        out = dict(DEFAULT_PAD)
+        out.update({k: [int(x) for x in v] for k, v in data.items() if k in DEFAULT_PAD})
+        return out
     except (OSError, ValueError, TypeError, AttributeError):
         return dict(DEFAULT_PAD)
 
@@ -456,6 +459,7 @@ def run(game, screen=None, max_frames=None):
     start_held = 0.0
     frames = 0
     running = True
+    went_home = False
     while running:
         dt = min(clock.tick(FPS) / 1000.0, 1 / 20)
         for ev in pygame.event.get():
@@ -485,6 +489,9 @@ def run(game, screen=None, max_frames=None):
                 running = False
         else:
             start_held = 0.0
+        if "home" in inp.pressed or (inp.p2 is not None and "home" in inp.p2.pressed):
+            went_home = True                          # the controller's home button: straight back to the games menu
+            running = False
         game.step(dt, inp)
         game.render(canvas)
         if start_held > 0.4:
@@ -504,6 +511,7 @@ def run(game, screen=None, max_frames=None):
             running = False
     game.sound.stop_music()
     res = game.result()
+    res["home"] = went_home
     if own:
         pygame.display.quit()
     return res
