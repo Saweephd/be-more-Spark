@@ -905,6 +905,21 @@ class BotGUI:
             if self.current_state == BotStates.LOW_BATTERY:
                 self.set_state(BotStates.IDLE, "Tap to speak")
 
+    def wifi_switch(self, target):
+        """Move to the phone hotspot or back to the home Wi-Fi, then say how it went."""
+        def worker():
+            from core import wifi
+            self._wait_until_idle({BotStates.SPEAKING, BotStates.LISTENING}, poll_s=0.5, timeout_s=30)
+            try:
+                ok, line = wifi.switch(target)
+            except Exception as e:
+                ok, line = False, "BMO had trouble changing the Wi-Fi."
+                print(f"[WIFI] error: {e}")
+            print(f"[WIFI] {target}: {'ok' if ok else 'failed'}: {line}")
+            self._wait_until_idle({BotStates.SPEAKING, BotStates.LISTENING}, poll_s=0.5, timeout_s=60)
+            self.speak(line, msg="Wi-Fi")
+        threading.Thread(target=worker, daemon=True).start()
+
     def tv_cast(self, on):
         """Show BMO on the den TV through its Chromecast (ops/bmo_tv.py), or stop."""
         def worker():
@@ -1738,6 +1753,9 @@ class BotGUI:
                     time.sleep(1.5)
                     open(SAVER_FLAG, "w").close()
                 threading.Thread(target=saver_later, daemon=True).start()
+                chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
+            elif action_data.get("action") == "wifi":
+                self.wifi_switch(action_data.get("target", "hotspot"))
                 chunk = (chunk[:span[0]] + chunk[span[1]:]).strip()
             elif action_data.get("action") in ("tv_on", "tv_off"):
                 self.tv_cast(action_data.get("action") == "tv_on")

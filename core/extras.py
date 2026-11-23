@@ -75,6 +75,26 @@ def match_tv(text):
     return None
 
 
+_PHONE = r"\b(hot ?spots?|my (i ?)?phone|your phone|the phone|phone'?s? (wi ?fi|internet|network))\b"
+_HOME_NET = r"\b(home|house|regular|normal) (wi ?fi|network|internet)\b"
+_MOVE = r"\b(switch|connect|change|go|hop|jump|move|get|use|join|shift|swap)\w*\b"
+
+
+def match_wifi(text):
+    """'hotspot' for "switch to my phone hotspot", 'home' for "go back to the home wifi",
+    'status' for "what wifi are you on", else None."""
+    t = _norm(text)
+    if re.search(r"\b(what|which) (wi ?fi|network|internet)\b.*\b(you|bmo)\b|\bare you (online|connected|on (the )?(wi ?fi|internet))\b", t):
+        return "status"
+    if not re.search(_MOVE, t):
+        return None
+    if re.search(_HOME_NET, t):
+        return "home"
+    if re.search(r"\bhot ?spots?\b", t) or (re.search(_PHONE, t) and re.search(r"\b(wi ?fi|internet|network|online|connect\w*)\b", t)):
+        return "hotspot"
+    return None
+
+
 def match_screensaver(text):
     t = _norm(text)
     return bool(re.search(r"\b(start|show|turn on|put on|go to|play)\b.*\bscreen ?saver\b|\bscreen ?saver (on|now|please)\b", t))

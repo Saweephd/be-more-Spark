@@ -233,6 +233,7 @@ main() {
         games)           runpy -c 'from core.games import GAMES; from core.games.common import load_scores; s=load_scores(); [print("%-12s %-12s best %s" % (k, v, s.get(k, 0))) for k, v in GAMES.items()]';;
         music)           runpy ops/bmo_music.py list;;
         music-import)    [ -n "${1:-}" ] || { echo 'music-import: give a folder'; exit 2; }; runpy ops/bmo_music.py import "$1";;
+        wifi)            runpy ops/bmo_wifi.py "$@";;
         saver)           runpy ops/bmo_saver.py list;;
         saver-now)       touch /tmp/bmo_screensaver_now; echo "screen saver starts as soon as BMO is idle";;
         saver-import)    [ -n "${1:-}" ] || { echo 'saver-import: give a folder'; exit 2; }; runpy ops/bmo_saver.py import "$1";;

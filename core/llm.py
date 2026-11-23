@@ -609,6 +609,21 @@ class Brain:
                 yield line
                 yield '{"action": "screensaver"}'
                 return
+            net = extras.match_wifi(user_text)
+            if net:                                  # works with no network at all: nothing is sent anywhere
+                from core import wifi
+                print(f"[LLM-STREAM] Wi-Fi request MATCHED: {net}")
+                if net == "status":
+                    line = wifi.status_line()
+                    self.history.append({"role": "assistant", "content": line})
+                    yield line
+                    return
+                line = ("Okay! BMO will look for your phone hotspot. One moment." if net == "hotspot"
+                        else "Okay! BMO will go back to the home Wi-Fi. One moment.")
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                yield json.dumps({"action": "wifi", "target": net})
+                return
             tv = extras.match_tv(user_text)
             if tv:
                 line = "BMO is going on the big screen!" if tv == "on" else "BMO is back!"
