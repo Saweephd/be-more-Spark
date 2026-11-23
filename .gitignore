@@ -104,3 +104,6 @@ core/games/scores.json
 
 # Firmware build output
 firmware/**/build/
+
+# this BMO's own controller button numbers
+core/games/pad.json
