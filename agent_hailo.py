@@ -920,6 +920,24 @@ class BotGUI:
             print("[TV] stream ready: " + " | ".join(r.stdout.strip().splitlines()))
         except Exception as e:
             print(f"[TV] stream set up failed: {e}")
+        # Adding a screen makes the desktop drop BMO's face out of full screen (it shrinks to a small
+        # window). Put it back, and check again a little later in case the desktop was still settling.
+        for delay in (500, 4000, 12000):
+            try:
+                self.master.after(delay, self._full_screen_again)
+            except Exception:
+                pass
+
+    def _full_screen_again(self):
+        try:
+            if self.master.winfo_width() >= 780 and self.master.winfo_height() >= 460 and self.master.winfo_rootx() == 0:
+                return
+            self.master.attributes('-fullscreen', False)
+            self.master.geometry("800x480+0+0")
+            self.master.after(150, lambda: self.master.attributes('-fullscreen', True))
+            print("[TV] face put back to full screen")
+        except Exception as e:
+            print(f"[TV] could not restore full screen: {e}")
 
     def wifi_switch(self, target):
         """Move to the phone hotspot or back to the home Wi-Fi, then say how it went."""
