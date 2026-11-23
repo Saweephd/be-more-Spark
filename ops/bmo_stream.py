@@ -34,8 +34,8 @@ ENV = dict(os.environ, WAYLAND_DISPLAY=os.environ.get("WAYLAND_DISPLAY", "waylan
            XDG_RUNTIME_DIR=os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid()))
 BINDS = '''\t<keyboard>
 \t\t<default/>
-\t\t<keybind key="C-A-W-F9"><action name="VirtualOutputAdd" output_name="%s"/></keybind>
-\t\t<keybind key="C-A-W-F10"><action name="VirtualOutputRemove" output_name="%s"/></keybind>
+\t\t<keybind key="W-S-F9"><action name="VirtualOutputAdd" output_name="%s"/></keybind>
+\t\t<keybind key="W-S-F10"><action name="VirtualOutputRemove" output_name="%s"/></keybind>
 \t</keyboard>
 ''' % (TV, TV)
 
@@ -50,12 +50,14 @@ def outputs():
 
 
 def ensure_binds():
-    """The desktop can only add a screen from a key press, so give it two private key combinations."""
+    """The desktop can only add a screen from a key press, so give it two private key combinations.
+    They must not be Ctrl+Alt+F-key, which Linux takes for itself to switch consoles and blanks the screen."""
     text = open(RC).read()
-    if "VirtualOutputAdd" in text:
+    if BINDS in text:
         return False
     if not os.path.exists(RC + ".before-stream"):
         open(RC + ".before-stream", "w").write(text)
+    text = open(RC + ".before-stream").read()        # start again from the settings as they were
     open(RC, "w").write(text.replace("</openbox_config>", BINDS + "</openbox_config>"))
     pid = sh(["pgrep", "-x", "labwc"]).stdout.split()
     if pid:
@@ -65,9 +67,9 @@ def ensure_binds():
 
 
 def press(fkey):
-    """Press Ctrl+Alt+Super+F9 or F10 on a pretend keyboard."""
+    """Press Super+Shift+F9 or F10 on a pretend keyboard. (Never Ctrl+Alt+F-key: that changes console.)"""
     from evdev import UInput, ecodes as e
-    keys = [e.KEY_LEFTCTRL, e.KEY_LEFTALT, e.KEY_LEFTMETA, fkey]
+    keys = [e.KEY_LEFTMETA, e.KEY_LEFTSHIFT, fkey]
     ui = UInput({e.EV_KEY: keys}, name="bmo-stream-keys")
     time.sleep(0.6)                                  # the desktop needs a moment to notice a new keyboard
     for k in keys:
