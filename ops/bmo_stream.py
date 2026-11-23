@@ -133,7 +133,8 @@ def up():
     sh(["systemctl", "--user", "reset-failed", UNIT])
     ok = make_screen()
     names = outputs()
-    set_conf(names.index(TV) if ok else None)
+    # Sunshine numbers screens in the order they were made, so the new one is always last
+    set_conf(len(names) - 1 if ok else None)
     r = sh(["systemd-run", "--user", "--unit=" + UNIT, "--setenv=WAYLAND_DISPLAY=" + ENV["WAYLAND_DISPLAY"],
             "--setenv=DISPLAY=:0", "/usr/bin/sunshine"])
     print("second screen: %s" % ("ready, BMO's own screen will stay upright" if ok else "NOT available, streams will use the old way"))
