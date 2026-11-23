@@ -122,7 +122,9 @@ WAKE_WORD_MODEL = os.path.join(_PROJECT_ROOT, "wakeword.onnx")
 # 0.18 since 12 Nov 2026: in the first spoken test real "Hey BMO" attempts scored
 # 0.20 to 0.29, and nothing else in the room scored above 0.10.  Near misses are
 # logged ([EARS] Wake score ...) so this can be tuned from real use.
-WAKE_WORD_THRESHOLD = 0.18
+# 0.12 since 23 Nov 2026: in the closed case real attempts scored 0.14, 0.15 and 0.17 and were missed,
+# while the fan and room noise scored 0.00 to 0.09.
+WAKE_WORD_THRESHOLD = 0.12
 
 # Robustly find Audio Devices
 def find_audio_devices():
