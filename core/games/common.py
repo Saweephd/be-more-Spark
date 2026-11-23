@@ -409,7 +409,19 @@ def open_screen():
         # screen there, but it does honour a borderless window placed at that spot.
         os.environ["SDL_VIDEO_WINDOW_POS"] = "800,0"
         flags = pygame.NOFRAME
+    on_tv = flags == pygame.NOFRAME
     screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags)
+    if on_tv:
+        # Now that the window is on the TV's screen, go full screen there so it covers the desktop's
+        # task bar (without this the picture sits 36 pixels low and loses its bottom edge).
+        try:
+            for _ in range(6):
+                pygame.event.pump()
+                pygame.time.wait(40)
+            pygame.display.toggle_fullscreen()
+            screen = pygame.display.get_surface() or screen
+        except pygame.error:
+            pass
     pygame.mouse.set_visible(False)
     return screen
 
