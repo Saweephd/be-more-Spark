@@ -41,6 +41,7 @@ from core.stt import transcribe_audio
 from core.config import MIC_DEVICE_INDEX, MIC_SAMPLE_RATE, WAKE_WORD_MODEL, WAKE_WORD_THRESHOLD, ALSA_DEVICE, VOLUME
 from core.audio_capture import MicStream, Decimator, EndpointDetector, NoiseFloor, block_rms
 from core import extras
+from core.config import SPEECH_FACTOR, MIN_SPEECH_RMS
 from core import music_library
 from core import battery
 from core.config import (SLIDE_SECONDS, SCREENSAVER_SECONDS, SCREENSAVER_AFTER_SECONDS, SPEAKER_CARD, SPEAKER_LEVEL_PERCENT, NIGHT_CLOCK_START_HOUR, NIGHT_CLOCK_END_HOUR, NIGHT_CLOCK_12_HOUR,
@@ -1221,7 +1222,8 @@ class BotGUI:
         print("Recording...")
         filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "input.wav")
         frames = []
-        detector = EndpointDetector(noise_rms=self._noise_floor.value)
+        detector = EndpointDetector(noise_rms=self._noise_floor.value, speech_factor=SPEECH_FACTOR,
+                                    min_speech_rms=MIN_SPEECH_RMS)
         last_block_at = time.time()
 
         try:
