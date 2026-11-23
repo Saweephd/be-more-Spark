@@ -69,17 +69,41 @@ def hotspot_name(run=_run):
     return ssid or None
 
 
-def scan(run=_run):
-    """Networks in range, strongest first, each name once."""
-    _, out, _ = run(["-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list", "--rescan", "yes"])
+def scan(run=_run, passes=1, sleep=time.sleep):
+    """Networks in range, strongest first, each name once. More passes find more (a phone can be slow to show)."""
     best = {}
-    for f in map(_split, out.splitlines()):
-        if len(f) >= 2 and f[0]:
-            try:
-                best[f[0]] = max(best.get(f[0], 0), int(f[1]))
-            except ValueError:
-                pass
+    for n in range(passes):
+        if n:
+            sleep(5)
+        _, out, _ = run(["-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list", "--rescan", "yes"])
+        for f in map(_split, out.splitlines()):
+            if len(f) >= 2 and f[0]:
+                try:
+                    best[f[0]] = max(best.get(f[0], 0), int(f[1]))
+                except ValueError:
+                    pass
     return sorted(best, key=lambda s: -best[s])
+
+
+def _plain(name):
+    """A name with case, spaces and the many kinds of apostrophe taken out, for forgiving comparison."""
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def closest(typed, seen):
+    """The network in range that a typed name most likely means: phones use a curly apostrophe
+    and their own capital letters, which nobody types. None when nothing is close."""
+    import difflib
+    want = _plain(typed)
+    for s in seen:
+        if s == typed:
+            return s
+    for s in seen:
+        if _plain(s) == want:
+            return s
+    plain = {_plain(s): s for s in seen}
+    hit = difflib.get_close_matches(want, list(plain), n=1, cutoff=0.75)
+    return plain[hit[0]] if hit else None
 
 
 def save(ssid, password, run=_run):

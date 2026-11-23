@@ -92,6 +92,13 @@ class Wifi(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(nm.active, wifi.HOTSPOT)                                         # stays online
 
+    def test_typed_name_is_matched_to_what_the_phone_sends(self):
+        seen = ["CrownCorbi", "stanw\u2019s iPhone", "Lee15217_5G"]
+        self.assertEqual(wifi.closest("stanw's iphone", seen), "stanw\u2019s iPhone")
+        self.assertEqual(wifi.closest("stan's iphone", seen), "stanw\u2019s iPhone")
+        self.assertEqual(wifi.closest("crowncorbi", seen), "CrownCorbi")
+        self.assertIsNone(wifi.closest("somebody else", seen))
+
     def test_colons_in_names(self):
         self.assertEqual(wifi._split("My\\:Net:80"), ["My:Net", "80"])
 

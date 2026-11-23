@@ -34,18 +34,47 @@ def main(argv):
         ssid = wifi.hotspot_name()
         print("Saved phone hotspot: %s" % (ssid or "none yet (run: ops/bmo-ctl.sh wifi setup)"))
         return 0
+    if cmd == "_scan":
+        print(json.dumps(wifi.scan(passes=3)))
+        return 0
     if cmd == "setup":
-        seen = wifi.scan()
+        print("Looking for networks (about 15 seconds). Keep the phone's hotspot page open...")
+        if wifi.allowed():
+            seen = wifi.scan(passes=3)
+        else:                                       # a remote login cannot ask for a fresh scan; BMO's own session can
+            r = subprocess.run(["systemd-run", "--user", "--quiet", "--wait", "--pipe", "--collect", sys.executable,
+                                os.path.abspath(__file__), "_scan"], capture_output=True, text=True)
+            try:
+                seen = json.loads(r.stdout.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                seen = wifi.scan()
         if not seen:
             print("No Wi-Fi networks in range.")
         for i, s in enumerate(seen, 1):
             print("  %2d. %s" % (i, s))
-        pick = input("Turn the phone hotspot on, then type its number above, or its exact name: ").strip()
-        ssid = seen[int(pick) - 1] if pick.isdigit() and 0 < int(pick) <= len(seen) else pick
+        try:
+            pick = input("Type the number of your phone above (or its name): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nNothing changed.")
+            return 2
+        if pick.isdigit() and 0 < int(pick) <= len(seen):
+            ssid = seen[int(pick) - 1]
+        else:
+            ssid = wifi.closest(pick, seen) if pick else None
+            if pick and not ssid:
+                print("\"%s\" is not in range right now, so BMO cannot check the name. Nothing changed." % pick)
+                print("Open the hotspot page on the phone and run this again, then pick it by number.")
+                return 2
+            if ssid and ssid != pick:
+                print("Using the name exactly as the phone sends it: %s" % ssid)
         if not ssid:
             print("Nothing chosen.")
             return 2
-        password = getpass.getpass("Password for \"%s\" (hidden as you type): " % ssid)
+        try:
+            password = getpass.getpass("Password for \"%s\" (hidden as you type): " % ssid)
+        except (KeyboardInterrupt, EOFError):
+            print("\nNothing changed.")
+            return 2
         payload = {"ssid": ssid, "password": password}
         if wifi.allowed():
             return _save(payload)
