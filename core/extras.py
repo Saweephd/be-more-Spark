@@ -95,6 +95,21 @@ def match_wifi(text):
     return None
 
 
+def match_tv_mode(text):
+    """'on' for "TV mode on" or "let's play on the TV", 'off' for "TV mode off" or "play on BMO", else None."""
+    t = _norm(text)
+    big = r"(tv|television|big screen)"
+    if re.search(r"\b%s mode (is )?off\b|\b(turn|switch) off (the )?%s mode\b|\bstop (playing|the games?) on (the )?%s\b" % (big, big, big), t):
+        return "off"
+    if re.search(r"\bplay\w* (\w+ ){0,3}on (bmo|you|your (own |little )?screen|the little screen)\b|\bplay (right )?here\b", t):
+        return "off"
+    if re.search(r"\b%s mode\b" % big, t):
+        return "on"
+    if re.search(r"\b(play|games?|gaming)\b.*\bon (the |my |our )?%s\b" % big, t):
+        return "on"
+    return None
+
+
 def match_screensaver(text):
     t = _norm(text)
     return bool(re.search(r"\b(start|show|turn on|put on|go to|play)\b.*\bscreen ?saver\b|\bscreen ?saver (on|now|please)\b", t))

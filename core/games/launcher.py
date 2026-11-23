@@ -4,6 +4,7 @@ import importlib
 import pygame
 
 from . import GAMES, common as c
+from .. import tvmode
 from .common import H, W, text
 
 
@@ -29,6 +30,11 @@ class Menu:
         self.scores_path = scores_path
         self.message = ""
         self.sound = c._sound.Silent()
+        self.tv_box = pygame.Rect(W - 92, 4, 88, 17)      # the TV mode switch, top right
+
+    def toggle_tv(self):
+        tvmode.set_mode(not tvmode.on())
+        self.sound.play("select")
 
     def step(self, dt, inp):
         self.time += dt
@@ -40,7 +46,13 @@ class Menu:
         if "up" in inp.pressed:
             self.index = (self.index - 1) % len(self.games)
             self.sound.play("move")
+        if "left" in inp.pressed or "right" in inp.pressed:
+            self.toggle_tv()
         if inp.touch is not None and "a" in inp.pressed:
+            if self.tv_box.inflate(8, 8).collidepoint(inp.touch):
+                self.toggle_tv()
+                inp.pressed.discard("a")
+                return
             row = (inp.touch[1] - 26) // 18
             if 0 <= row < len(self.games):
                 self.index = row
@@ -63,9 +75,14 @@ class Menu:
             pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 17), border_radius=4)
             text(surf, title, (64, y + 2), 18, c.INK if sel else c.WHITE, shadow=not sel)
             text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 3), 14, c.INK if sel else (170, 210, 210), shadow=False)
-        if self.message:
-            text(surf, self.message, (W // 2, 208), 14, c.WHITE, center=True)
-        text(surf, "D-pad: choose   Big button: play   Triangle: back", (W // 2, 224), 16, c.WHITE, center=True)
+        tv = tvmode.on()
+        pygame.draw.rect(surf, (240, 200, 70) if tv else (30, 96, 100), self.tv_box, border_radius=4)
+        text(surf, "< TV: %s >" % ("ON" if tv else "OFF"), (self.tv_box.centerx, self.tv_box.y + 2), 16,
+             c.INK if tv else c.WHITE, center=True, shadow=not tv)
+        note = tvmode.hint() or self.message
+        if note:
+            text(surf, note, (W // 2, 208), 14, c.YELLOW if tvmode.hint() else c.WHITE, center=True)
+        text(surf, "Up/down: choose  Left/right: TV  Big button: play", (W // 2, 224), 16, c.WHITE, center=True)
 
 
 def run_menu(screen=None, max_frames=None):
@@ -88,6 +105,7 @@ def run_menu(screen=None, max_frames=None):
     menu.sound = c._sound.get()
     menu.sound.music("menu")
     last = {"game": None, "played": False, "score": 0, "best": 0, "new_best": False, "title": ""}
+    on_tv = tvmode.use_tv()
     start_held = 0.0
     frames = 0
     while not menu.done:
@@ -111,6 +129,12 @@ def run_menu(screen=None, max_frames=None):
         if start_held >= c.QUIT_HOLD_S:
             menu.done = True
         menu.step(dt, inp)
+        if own and tvmode.use_tv() != on_tv:         # TV mode switched, or the TV connected: move the picture
+            on_tv = tvmode.use_tv()
+            pygame.display.quit()
+            screen = c.open_screen()
+            pygame.display.set_caption("BMO Games")
+            pygame.event.clear()
         if menu.choice:
             name, menu.choice = menu.choice, None
             game = importlib.import_module("core.games." + name).make()

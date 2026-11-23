@@ -624,6 +624,18 @@ class Brain:
                 yield line
                 yield json.dumps({"action": "wifi", "target": net})
                 return
+            mode = extras.match_tv_mode(user_text)
+            if mode:
+                from core import tvmode
+                tvmode.set_mode(mode == "on")
+                line = tvmode.line()
+                print(f"[LLM-STREAM] TV mode: {mode}")
+                self.history.append({"role": "assistant", "content": line})
+                yield line
+                game = extras.match_game(user_text)
+                if game and game != "menu":           # "play Alien Storm on the TV" does both
+                    yield json.dumps({"action": "play_game", "game": game})
+                return
             tv = extras.match_tv(user_text)
             if tv:
                 line = "BMO is going on the big screen!" if tv == "on" else "BMO is back!"

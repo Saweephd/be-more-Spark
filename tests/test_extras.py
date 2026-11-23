@@ -83,9 +83,6 @@ class SpokenResult(unittest.TestCase):
         self.assertIn("90", line)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class VoicePath(unittest.TestCase):
     """The same checks through Brain.stream_think, which is what the agent calls."""
@@ -139,3 +136,38 @@ class VoicePath(unittest.TestCase):
         brain._shutdown_pending -= 600                         # asked ten minutes ago
         out = self.say(brain, "play bmo catch")
         self.assertIn('"bmo_catch"', out[-1])
+
+
+class TvMode(unittest.TestCase):
+    def test_phrases(self):
+        from core import extras
+        for said in ("TV mode on", "turn on tv mode", "let's play on the TV", "play alien storm on the big screen", "games on the tv please"):
+            self.assertEqual(extras.match_tv_mode(said), "on", said)
+        for said in ("TV mode off", "turn off tv mode", "play on BMO", "let's play here", "stop playing on the tv", "play on your screen"):
+            self.assertEqual(extras.match_tv_mode(said), "off", said)
+        for said in ("play mazee run", "turn off the tv", "what is on tv tonight", "show me on the tv", "play bacon pancakes"):
+            self.assertIsNone(extras.match_tv_mode(said), said)
+
+    def test_games_need_both_the_mode_and_a_connected_tv(self):
+        import os
+        import tempfile
+        from core import tvmode
+        d = tempfile.mkdtemp()
+        tvmode.MODE, tvmode.STREAM = os.path.join(d, "mode"), os.path.join(d, "stream")
+        self.assertFalse(tvmode.use_tv())
+        open(tvmode.STREAM, "w").write("1")                  # the TV is connected, but nobody asked for TV mode
+        self.assertFalse(tvmode.use_tv())
+        self.assertIn("right here on BMO", tvmode.line())
+        tvmode.set_mode(True)
+        self.assertTrue(tvmode.use_tv())
+        self.assertIn("on the TV", tvmode.line())
+        os.remove(tvmode.STREAM)                             # TV mode on, TV not connected yet
+        self.assertFalse(tvmode.use_tv())
+        self.assertIn("Moonlight", tvmode.line())
+        self.assertIn("Moonlight", tvmode.hint())
+        tvmode.set_mode(False)
+        self.assertEqual(tvmode.hint(), "")
+
+
+if __name__ == "__main__":
+    unittest.main()
