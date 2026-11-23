@@ -206,17 +206,22 @@ def down():
     return 0
 
 
+MODE = "/tmp/bmo_tv_mode"                   # the same switch the games menu and "TV mode on" use
+
+
 def begin():
     if TV in outputs():
         open(FLAG, "w").write("1")
+        open(MODE, "w").write("1")                  # connecting from the TV is asking to play on the TV
     else:
         sh(["wlr-randr", "--output", PANEL, "--transform", "normal"])
     return 0
 
 
 def end():
-    if os.path.exists(FLAG):
-        os.remove(FLAG)
+    for path in (FLAG, MODE):
+        if os.path.exists(path):
+            os.remove(path)
     sh(["wlr-randr", "--output", PANEL, "--transform", "180"])
     return 0
 

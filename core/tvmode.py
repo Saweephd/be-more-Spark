@@ -1,8 +1,9 @@
 """TV mode: whether BMO's games should play on the TV.
 
 Two things must both be true for a game to open on the TV's screen:
-  - TV mode is on (said out loud, or switched in the games menu). It is off after every start up,
-    so BMO plays on its own screen unless somebody asks otherwise.
+  - TV mode is on. Connecting from the TV turns it on by itself and disconnecting turns it off; it can
+    also be said out loud or switched in the games menu, for instance to pull a game back onto BMO
+    while the TV stays connected.
   - a stream from the TV is connected (Moonlight on the TV, picked "BMO"); ops/bmo_stream.py marks that.
 With TV mode on and no stream yet, games stay on BMO and the menu says what to do on the TV.
 """
