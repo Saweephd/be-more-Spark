@@ -401,13 +401,13 @@ def open_screen():
     pygame.display.init()
     pygame.font.init()
     flags = 0 if os.environ.get("BMO_GAME_WINDOWED") else pygame.FULLSCREEN
-    second = 0
     if os.path.exists("/tmp/bmo_streaming") and pygame.display.get_num_displays() > 1:
-        second = 1                                   # a TV stream is running: play on the screen the TV shows
-    try:
-        screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags, display=second)
-    except pygame.error:
-        screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags)
+        # A TV stream is running (ops/bmo_stream.py): play on the invisible second screen the TV shows,
+        # which sits to the right of BMO's own. The desktop ignores a request to go full screen there,
+        # but it does honour a borderless window placed at that spot.
+        os.environ["SDL_VIDEO_WINDOW_POS"] = "800,0"
+        flags = pygame.NOFRAME
+    screen = pygame.display.set_mode((W * SCALE, H * SCALE), flags)
     pygame.mouse.set_visible(False)
     return screen
 
