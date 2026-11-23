@@ -129,6 +129,11 @@ def set_conf(index):
 
 
 def up():
+    if TV in outputs() and sh(["systemctl", "--user", "is-active", UNIT]).stdout.strip() == "active" \
+            and not os.path.exists(FLAG) and "output_name" in open(CONF).read():
+        print("second screen: ready, BMO's own screen will stay upright")
+        print("sunshine: already running")
+        return 0
     sh(["systemctl", "--user", "stop", UNIT])
     sh(["systemctl", "--user", "reset-failed", UNIT])
     ok = make_screen()

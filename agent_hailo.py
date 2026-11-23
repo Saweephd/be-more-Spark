@@ -260,6 +260,7 @@ class BotGUI:
         threading.Thread(target=self.screensaver_audio_loop, daemon=True).start()
         threading.Thread(target=self._keep_model_warm_loop, daemon=True).start()
         threading.Thread(target=self._battery_loop, daemon=True).start()
+        threading.Thread(target=self._tv_stream_ready, daemon=True).start()
 
         # Pre-warm the VLM (Hailo NPU) so the first "what is this?" doesn't
         # eat a ~3 s init tax mid-conversation.  Best-effort only.
@@ -904,6 +905,21 @@ class BotGUI:
             self._release_busy()
             if self.current_state == BotStates.LOW_BATTERY:
                 self.set_state(BotStates.IDLE, "Tap to speak")
+
+    def _tv_stream_ready(self):
+        """Get the TV stream ready at start up: the invisible second screen and Sunshine (ops/bmo_stream.py).
+        Does nothing on a machine without Sunshine. Set BMO_TV_STREAM=0 to leave it off."""
+        if os.environ.get("BMO_TV_STREAM", "1") == "0" or not os.path.exists("/usr/bin/sunshine"):
+            return
+        if self.stop_event.wait(timeout=20):         # let the desktop settle first
+            return
+        try:
+            here = os.path.dirname(os.path.abspath(__file__))
+            r = subprocess.run([sys.executable, os.path.join(here, "ops", "bmo_stream.py"), "up"],
+                               capture_output=True, text=True, timeout=60)
+            print("[TV] stream ready: " + " | ".join(r.stdout.strip().splitlines()))
+        except Exception as e:
+            print(f"[TV] stream set up failed: {e}")
 
     def wifi_switch(self, target):
         """Move to the phone hotspot or back to the home Wi-Fi, then say how it went."""
