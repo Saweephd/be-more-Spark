@@ -13,4 +13,5 @@ GAMES = {
     "air_hockey": "Air Hockey",
     "alien_storm": "Alien Storm: Tom Cat Alley",
     "music_teacher": "Music Teacher's Pet",
+    "vampires": "Vampires, Oh Well...",
 }

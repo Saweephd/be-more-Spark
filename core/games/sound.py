@@ -423,6 +423,25 @@ TUNES = {
 }
 
 
+# Vampires, Oh Well...: a harpsichord-like gothic march in D minor, and a faster one for the bosses. Original.
+TUNES.update({
+    "vampires": (132, 2, {
+        "lead": "D5:2 F5:2 A5:2 F5:2 D5:2 F5:2 A5:4 C5:2 E5:2 G5:2 E5:2 C5:2 E5:2 G5:4 Bb4:2 D5:2 F5:2 D5:2 Bb4:2 D5:2 F5:4 "
+                "A4:2 C#5:2 E5:2 C#5:2 A4:4 E5:2 C#5:2 D5:3 E5:1 F5:2 A5:2 G5:3 F5:1 E5:4 C5:3 D5:1 E5:2 G5:2 F5:3 E5:1 D5:4 "
+                "Bb4:2 D5:2 G5:4 F5:2 E5:2 D5:4 E5:2 C#5:2 A4:4 A4:2 C#5:2 E5:4",
+        "rbass": ("D2:1 D2:1 D3:1 D2:1 " * 4 + "C2:1 C2:1 C3:1 C2:1 " * 4 + "Bb1:1 Bb1:1 Bb2:1 Bb1:1 " * 4 + "A1:1 A1:1 A2:1 A1:1 " * 4) * 2,
+        "chord": ("R:2 D4+F4:1 R:1 " * 4 + "R:2 C4+E4:1 R:1 " * 4 + "R:2 Bb3+D4:1 R:1 " * 4 + "R:2 A3+C#4:1 R:1 " * 4) * 2,
+        "drum": "B:1 H:1 N:1 H:1 B:1 B:1 N:1 H:1 " * 16,
+    }),
+    "vampires_boss": (168, 2, {
+        "lead": "D5:1 D5:1 D6:2 A5:2 G#5:1 A5:1 F5:2 D5:2 F5:2 A5:2 C5:1 C5:1 C6:2 G5:2 F#5:1 G5:1 E5:2 C5:2 E5:2 G5:2 "
+                "Bb4:1 Bb4:1 Bb5:2 F5:2 E5:1 F5:1 D5:2 Bb4:2 D5:2 F5:2 A4:1 A4:1 A5:2 E5:2 C#5:2 E5:2 A5:2 G5:2 E5:2",
+        "rbass": "D2:1 D3:1 " * 8 + "C2:1 C3:1 " * 8 + "Bb1:1 Bb2:1 " * 8 + "A1:1 A2:1 " * 8,
+        "drum": "B:1 H:1 N:1 B:1 " * 16,
+    }),
+})
+
+
 def render_tune(name):
     np = _np()
     bpm, per_beat, parts = TUNES[name]
