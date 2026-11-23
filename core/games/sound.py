@@ -604,6 +604,43 @@ class Player(Silent):
 _player = None
 
 
+_HOME_AUDIO = (os.environ.get("SDL_AUDIODRIVER"), os.environ.get("AUDIODEV"))   # how BMO's own speaker is reached
+on_tv = False                                    # whether the sound is currently going to the TV
+
+
+def _route():
+    """Send game sound to the TV while a game is playing there, otherwise to BMO's speaker.
+    The TV stream carries whatever plays on the desktop's sound server, so on the TV the game uses that
+    server (which the stream has pointed at itself); on BMO it opens the speaker directly as before."""
+    global on_tv
+    try:
+        from core import tvmode
+        on_tv = bool(tvmode.use_tv()) and os.environ.get("BMO_TV_SOUND", "1") != "0"
+    except Exception:
+        on_tv = False
+    if on_tv:
+        os.environ["SDL_AUDIODRIVER"] = "pulseaudio"
+        os.environ.pop("AUDIODEV", None)
+    else:
+        for key, value in zip(("SDL_AUDIODRIVER", "AUDIODEV"), _HOME_AUDIO):
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def reset():
+    """Close the speaker so the next get() opens it afresh (used when the picture moves to or from the TV)."""
+    global _player
+    try:
+        import pygame
+        if pygame.mixer.get_init():
+            pygame.mixer.quit()
+    except Exception:
+        pass
+    _player = None
+
+
 def get():
     """The shared player: real sound if the speaker opens, otherwise Silent."""
     global _player
@@ -615,6 +652,7 @@ def get():
     try:
         import pygame
         _np()
+        _route()
         try:
             volume = max(0.0, min(1.0, float(os.environ.get("BMO_VOLUME", "0.8"))))
         except ValueError:

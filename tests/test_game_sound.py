@@ -81,3 +81,25 @@ class GamesMakeSound(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTvSound(unittest.TestCase):
+    def test_sound_follows_the_picture_to_the_tv_and_back(self):
+        from unittest import mock
+        from core import tvmode
+        from core.games import sound as S
+        home = S._HOME_AUDIO
+        try:
+            S._HOME_AUDIO = ("alsa", "plughw:Speaker,0")
+            with mock.patch.dict(os.environ, {"SDL_AUDIODRIVER": "alsa", "AUDIODEV": "plughw:Speaker,0"}):
+                with mock.patch.object(tvmode, "use_tv", return_value=True):
+                    S._route()
+                    self.assertTrue(S.on_tv)
+                    self.assertEqual(os.environ.get("SDL_AUDIODRIVER"), "pulseaudio")
+                    self.assertNotIn("AUDIODEV", os.environ)
+                with mock.patch.object(tvmode, "use_tv", return_value=False):
+                    S._route()
+                    self.assertFalse(S.on_tv)
+                    self.assertEqual((os.environ.get("SDL_AUDIODRIVER"), os.environ.get("AUDIODEV")), ("alsa", "plughw:Speaker,0"))
+        finally:
+            S._HOME_AUDIO = home

@@ -137,6 +137,9 @@ def run_menu(screen=None, max_frames=None):
             screen = c.open_screen()
             pygame.display.set_caption("BMO Games")
             pygame.event.clear()
+            c._sound.reset()                          # and the sound goes with it
+            menu.sound = c._sound.get()
+            menu.sound.music("menu")
         if menu.choice:
             name, menu.choice = menu.choice, None
             game = importlib.import_module("core.games." + name).make()
