@@ -12,4 +12,5 @@ GAMES = {
     "big_move": "The Big Move",
     "air_hockey": "Air Hockey",
     "alien_storm": "Alien Storm: Tom Cat Alley",
+    "music_teacher": "Music Teacher's Pet",
 }

@@ -31,6 +31,7 @@ class Menu:
         self.message = ""
         self.sound = c._sound.Silent()
         self.tv_box = pygame.Rect(W - 92, 4, 88, 17)      # the TV mode switch, top right
+        self.pitch = 18 if len(self.games) <= 10 else max(13, 180 // len(self.games))   # row spacing: a long list closes up
 
     def toggle_tv(self):
         tvmode.set_mode(not tvmode.on())
@@ -53,7 +54,7 @@ class Menu:
                 self.toggle_tv()
                 inp.pressed.discard("a")
                 return
-            row = (inp.touch[1] - 26) // 18
+            row = (inp.touch[1] - 26) // self.pitch
             if 0 <= row < len(self.games):
                 self.index = row
         if "a" in inp.pressed or "start" in inp.pressed:
@@ -70,11 +71,12 @@ class Menu:
         text(surf, "GAMES", (W // 2, 3), 26, c.YELLOW, center=True)
         scores = c.load_scores(self.scores_path)
         for i, (name, title) in enumerate(self.games):
-            y = 26 + i * 18
+            y = 26 + i * self.pitch
             sel = i == self.index
-            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, 17), border_radius=4)
-            text(surf, title, (64, y + 2), 18, c.INK if sel else c.WHITE, shadow=not sel)
-            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + 3), 14, c.INK if sel else (170, 210, 210), shadow=False)
+            small = self.pitch < 18
+            pygame.draw.rect(surf, (60, 190, 170) if sel else (30, 96, 100), (50, y, W - 100, self.pitch - 1), border_radius=4)
+            text(surf, title, (64, y + (1 if small else 2)), 16 if small else 18, c.INK if sel else c.WHITE, shadow=not sel)
+            text(surf, "best %d" % int(scores.get(name, 0)), (W - 124, y + (2 if small else 3)), 14, c.INK if sel else (170, 210, 210), shadow=False)
         tv = tvmode.on()
         pygame.draw.rect(surf, (240, 200, 70) if tv else (30, 96, 100), self.tv_box, border_radius=4)
         text(surf, "< TV: %s >" % ("ON" if tv else "OFF"), (self.tv_box.centerx, self.tv_box.y + 2), 16,

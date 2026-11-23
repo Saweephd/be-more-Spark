@@ -69,6 +69,29 @@ def tone(freq, dur, wave="square", duty=0.5, vol=0.5, slide=0.0, decay=None, vib
     return w * _env(n, decay=decay) * vol
 
 
+def piano(freq, dur=0.9, vol=0.5):
+    """A struck piano string: a stack of harmonics, the high ones dying first, with a soft hammer knock."""
+    np = _np()
+    n = max(1, int(dur * RATE))
+    t = np.arange(n, dtype=np.float32) / RATE
+    w = np.zeros(n, dtype=np.float32)
+    life = 0.55 * (220.0 / max(freq, 55.0)) ** 0.35              # low strings ring longer
+    for k, amp in ((1, 1.0), (2, 0.5), (3, 0.26), (4, 0.14), (5, 0.07), (6, 0.04)):
+        f = freq * k * (1 + 0.0004 * k * k)                       # real strings run a touch sharp up high
+        if f > RATE * 0.45:
+            break
+        w += amp * np.sin(2 * math.pi * f * t) * np.exp(-t / (life / (0.6 + 0.4 * k)))
+    knock = np.random.default_rng(int(freq)).uniform(-1, 1, n).astype(np.float32) * np.exp(-t / 0.006) * 0.25
+    w = (w + knock) / 1.9
+    a = min(n, int(0.003 * RATE))
+    r = min(n - a, int(0.08 * RATE))
+    if a:
+        w[:a] *= np.linspace(0, 1, a, dtype=np.float32)
+    if r:
+        w[n - r:] *= np.linspace(1, 0, r, dtype=np.float32)
+    return w * vol
+
+
 def chain(*parts):
     np = _np()
     return np.concatenate([p for p in parts if p is not None and len(p)])
@@ -578,7 +601,7 @@ def get():
         except ValueError:
             volume = 0.8
         pygame.mixer.init(frequency=RATE, size=-16, channels=1, buffer=1024)
-        pygame.mixer.set_num_channels(12)
+        pygame.mixer.set_num_channels(24)
         _player = Player(pygame, volume)
     except Exception as e:
         print("[GAME] No sound: %s" % e, flush=True)
