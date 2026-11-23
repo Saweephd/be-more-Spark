@@ -57,6 +57,25 @@ class UncleTTests(unittest.TestCase):
         self.assertEqual(game.music, "uncle_t")
         self.assertTrue({"ring", "curse", "rev"} <= game.cue)
 
+    def test_uncle_t_rambles_while_he_drives(self):
+        for line in ("I had the first copy of Windows 95.", "I drove tanks in the Army.", "The Army could use guys like you.",
+                     "This is all the fault of Bill Gates.", "Man, that Zuckerberg..."):
+            self.assertIn(line, ut.RAMBLES)
+        game, inp = self.started()
+        self.frames(game, inp, int(ut.INTRO_LEN * 60) + 5)
+        game.invuln = 9999.0
+        heard = set()
+        for _ in range(60 * 60):
+            game.invuln = 9999.0
+            game.step(DT, inp)
+            if game.state != "play":
+                break
+            if game.ramble_t > 0:
+                heard.add(game.ramble)
+                self.assertIn(game.ramble, ut.RAMBLES)
+        self.assertGreaterEqual(len(heard), 3)
+        game.render(self.canvas)
+
     def test_intro_skips_and_replay_skips_it(self):
         game, inp = self.started()
         self.frames(game, inp, 30)

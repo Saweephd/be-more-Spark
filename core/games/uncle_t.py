@@ -187,6 +187,21 @@ def tub_man(mood):
     return out
 
 
+# Things Uncle T says to nobody in particular while he drives. The first five are Stan's.
+RAMBLES = (
+    "I had the first copy of Windows 95.",
+    "I drove tanks in the Army.",
+    "The Army could use guys like you.",
+    "This is all the fault of Bill Gates.",
+    "Man, that Zuckerberg...",
+    "I told them about the internet in '89.",
+    "This car? Paid cash.",
+    "I know a shortcut. Nobody knows it but me.",
+    "They don't make phones like they used to.",
+    "Back in my day this was a dirt road.",
+)
+
+
 def bubble(surf, msg, x, y, size=16):
     font = pygame.font.Font(None, size)
     img = font.render(msg, False, c.INK)
@@ -327,6 +342,8 @@ class UncleT(Game):
         self.turbo_cool = 0.0
         self.taunt = 0.0
         self.taunt_cool = 0.0
+        self.ramble, self.ramble_t, self.ramble_cool = "", 0.0, 5.0
+        self.ramble_left = []
         self.crashed = 0
         self.shaken = 0
         start = min(self.level_choice, len(STRETCHES) - 1)
@@ -450,6 +467,14 @@ class UncleT(Game):
         self.invuln = max(0.0, self.invuln - dt)
         self.taunt = max(0.0, self.taunt - dt)
         self.taunt_cool = max(0.0, self.taunt_cool - dt)
+        self.ramble_t = max(0.0, self.ramble_t - dt)
+        self.ramble_cool -= dt
+        if self.ramble_cool <= 0 and self.taunt <= 0:
+            if not self.ramble_left:                              # every line once before any repeats
+                self.ramble_left = list(RAMBLES)
+                self.rng.shuffle(self.ramble_left)
+            self.ramble, self.ramble_t = self.ramble_left.pop(), 3.2
+            self.ramble_cool = self.rng.uniform(8.0, 13.0)
 
         self.update_traffic(dt, speed, stage)
         self.update_cops(dt, speed, p, stage, inp)
@@ -675,11 +700,12 @@ class UncleT(Game):
                 surf.blit(self.player_car, (int(self.px), PLAYER_Y))
         for x, y, r, t in self.puffs:
             pygame.draw.circle(surf, (150, 150, 150), (int(x), int(y)), int(r))
-        if self.taunt > 0 and self.phase == "drive":
+        if (self.taunt > 0 or self.ramble_t > 0) and self.phase == "drive":
             hx, hy = int(self.px) - 9, PLAYER_Y + 7
             pygame.draw.line(surf, SHIRT, (hx + 9, hy + 7), (hx + 1, hy + 10), 3)      # arm out of the window
             surf.blit(self.faces[min(3, int(self.rage * 3.99))], (hx - 13, hy - 12))
-            bubble(surf, "That's what you get!", hx - 30, hy - 36)
+            line = "That's what you get!" if self.taunt > 0 else self.ramble
+            bubble(surf, line, hx - 30 if self.taunt > 0 else hx - 70, hy - 36)
         self.draw_hud(surf)
         if self.banner[1] > 0 and self.phase == "drive":
             text(surf, self.banner[0], (W // 2, 70), 30, c.YELLOW, center=True)
