@@ -7,6 +7,7 @@ All the tunes are original to this project.
 If the speaker cannot be opened (or BMO_GAME_SOUND=0), every call quietly does
 nothing, so the games still run silently and the tests need no audio device.
 """
+import atexit
 import math
 import os
 
@@ -618,15 +619,61 @@ def _route():
         on_tv = bool(tvmode.use_tv()) and os.environ.get("BMO_TV_SOUND", "1") != "0"
     except Exception:
         on_tv = False
+    _mirror_stop()
     if on_tv:
         os.environ["SDL_AUDIODRIVER"] = "pulseaudio"
         os.environ.pop("AUDIODEV", None)
+        _mirror_start()
     else:
         for key, value in zip(("SDL_AUDIODRIVER", "AUDIODEV"), _HOME_AUDIO):
             if value is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+_mirror = []                                     # the two helper programs that copy TV sound to BMO's speaker
+
+
+def _mirror_start():
+    """While sound goes to the TV, also copy it to BMO's own speaker, so a game is never silent in the
+    room even if the TV plays no sound. BMO_TV_MIRROR=0 turns the copy off."""
+    speaker = _HOME_AUDIO[1]
+    if not speaker or os.environ.get("BMO_TV_MIRROR", "1") == "0":
+        return
+    try:
+        import ctypes
+        import subprocess
+
+        def with_me():                            # the helpers must never outlive the game and keep the speaker
+            ctypes.CDLL("libc.so.6").prctl(1, 15)
+
+        rec = subprocess.Popen(["pw-record", "--raw", "-P", "{ stream.capture.sink=true }", "--target", "sink-sunshine-stereo",
+                                "--rate", "48000", "--channels", "2", "--format", "s16", "--latency", "20ms", "-"],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, preexec_fn=with_me)
+        play = subprocess.Popen(["aplay", "-q", "-t", "raw", "-f", "S16_LE", "-r", "48000", "-c", "2", "-D", speaker,
+                                 "--buffer-time=80000"], stdin=rec.stdout, stderr=subprocess.DEVNULL, preexec_fn=with_me)
+        rec.stdout.close()
+        _mirror[:] = [rec, play]
+    except Exception as e:                        # no such programs, for instance on a development machine
+        print("[GAME] No speaker copy: %s" % e, flush=True)
+        _mirror[:] = []
+
+
+def _mirror_stop():
+    for proc in _mirror:
+        try:
+            proc.terminate()
+            proc.wait(timeout=1.0)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    _mirror[:] = []
+
+
+atexit.register(_mirror_stop)
 
 
 def reset():
@@ -638,6 +685,7 @@ def reset():
             pygame.mixer.quit()
     except Exception:
         pass
+    _mirror_stop()
     _player = None
 
 
