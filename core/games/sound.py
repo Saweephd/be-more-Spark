@@ -705,7 +705,14 @@ def get():
             volume = max(0.0, min(1.0, float(os.environ.get("BMO_VOLUME", "0.8"))))
         except ValueError:
             volume = 0.8
-        pygame.mixer.init(frequency=RATE, size=-16, channels=1, buffer=1024)
+        try:
+            pygame.mixer.init(frequency=RATE, size=-16, channels=1, buffer=1024)
+        except Exception:
+            if not on_tv:
+                raise
+            os.environ["BMO_TV_SOUND"] = "0"        # the TV's sound path would not open: use BMO's own speaker
+            _route()
+            pygame.mixer.init(frequency=RATE, size=-16, channels=1, buffer=1024)
         pygame.mixer.set_num_channels(24)
         _player = Player(pygame, volume)
     except Exception as e:
