@@ -111,7 +111,7 @@ def shot(screen, n, t):
                     pygame.draw.line(screen, (220, 220, 230), (cx + 82, 346), (cx + 70 - k * 12, 376))
         pygame.draw.rect(screen, (230, 200, 60), (210, 300, 10, 70))          # the barrier, with a bat on it
         pygame.draw.rect(screen, (230, 60, 60), (214, 304, 150, 8))
-        bat = _big(art.monster("bat", int(t * 3) % 2), 1)
+        bat = art.hd_monster("bat", int(t * 3) % 2, 1.0, None, False, -1, 2.4)
         screen.blit(bat, (280, 276))
         x = -300 + int(min(t, 4.0) * 110)
         screen.blit(grey_car(), (x, 362))
@@ -124,11 +124,11 @@ def shot(screen, n, t):
         pygame.draw.rect(screen, (150, 110, 70), (390 + open_w, 120, 170 - open_w, 260))
         pygame.draw.rect(screen, (236, 232, 214), (392, 60, 166, 34)); screen.blit(hud.font(26, True).render("STAFF ENTRANCE", True, (40, 80, 120)), (400, 68))
         if open_w > 60:
-            z = _big(art.monster("zombie", int(t * 2) % 2))
+            z = art.hd_monster("zombie", int(t * 2) % 2, 1.0, None, False, -1, 4.0)
             screen.blit(z, (410, 380 - z.get_height()))
         lx = int(min(t, 1.6) / 1.6 * 200)
         pose = "walk" if t < 1.6 else "stand"
-        me = _big(art.hunter("lucas", pose, int(t * 8) % 4))
+        me = art.hd_hunter("lucas", pose, int(t * 8) % 4, False, 1, 4.0)
         screen.blit(me, (lx + 20, 380 - me.get_height() + 4))
         _bubble(screen, "Braaains... I mean, badge?", 470, 150, t - 3.2)
         _bubble(screen, "Vampires. Oh well...", 330, 200, t - 5.6)
@@ -137,8 +137,8 @@ def shot(screen, n, t):
         for i in range(24):
             a = i * math.pi / 12 + t * 0.2
             pygame.draw.line(screen, (60, 20, 40), (400, 240), (400 + math.cos(a) * 600, 240 + math.sin(a) * 600), 6)
-        me = _big(art.hunter("lucas", "stand"), 3)
-        screen.blit(me, (400 - 160, 250 - me.get_height() // 2))
+        me = art.hd_hunter("lucas", "stand", 0, False, 1, 7.0)
+        screen.blit(me, (400 - 150, 270 - me.get_height() // 2))
         if t > 0.8:
             hud.label(screen, "VAMPIRES, OH WELL...", (400, 40), 64, (230, 60, 80), center=True, bold=True)
         _bubble(screen, "Monday.", 430, 110, t - 2.0)

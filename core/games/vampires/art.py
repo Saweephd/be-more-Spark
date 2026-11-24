@@ -53,9 +53,9 @@ def _limb(s, col, a, b, w):
 HW, HH = 44, 46                       # a hunter's frame: the figure stands in the middle, facing right
 
 
-def hunter(kind, pose="stand", frame=0, fire=False):
+def hunter(kind, pose="stand", frame=0, fire=False, scale=1.0):
     """poses: stand, walk (frames 0-3), jump, attack, hurt, bat."""
-    key = ("h", kind, pose, frame, fire)
+    key = ("h", kind, pose, frame, fire, scale)
     if key in _cache:
         return _cache[key]
     d = HUNTERS[kind]
@@ -67,7 +67,7 @@ def hunter(kind, pose="stand", frame=0, fire=False):
         A.oval(s, (56, 48, 76), (cx - 5, 17, 10, 12))
         A.poly(s, (56, 48, 76), [(cx - 4, 18), (cx - 5, 12), (cx - 1, 17)], mirror=cx)
         A.oval(s, (255, 230, 120), (cx - 3, 20, 2, 2), mirror=cx)
-        _cache[key] = _done(s)
+        _cache[key] = _done(s, scale)
         return _cache[key]
     skin, coat, shirt, hair = d["skin"], d["coat"], d["shirt"], d["hair"]
     wide = 2.0 if d.get("wide") else 0.0
@@ -145,7 +145,7 @@ def hunter(kind, pose="stand", frame=0, fire=False):
         hand = (cx + 6 + swing * 0.5, 26.5) if pose != "jump" else (cx + 9, 14)
         _limb(s, coat, shoulder, hand, 3.8)
         A.oval(s, skin, (hand[0] - 2, hand[1] - 2, 4, 4))
-    _cache[key] = _done(s)
+    _cache[key] = _done(s, scale)
     return _cache[key]
 
 
@@ -258,10 +258,10 @@ def monster(kind, frame=0, scale=1.0, look=None, flash=False):
     return out
 
 
-def small(kind):
-    """Pickups and props on the 400 x 240 canvas."""
-    if ("s", kind) in _cache:
-        return _cache[("s", kind)]
+def small(kind, scale=1.0):
+    """Pickups and props."""
+    if ("s", kind, scale) in _cache:
+        return _cache[("s", kind, scale)]
     s = _new(16, 20)
     if kind == "heart":
         A.oval(s, (232, 70, 90), (2, 5, 7, 7)); A.oval(s, (232, 70, 90), (7, 5, 7, 7)); A.poly(s, (232, 70, 90), [(2.4, 9.5), (13.6, 9.5), (8, 16)])
@@ -286,8 +286,8 @@ def small(kind):
         A.poly(s, (255, 230, 150), [(1, 19), (5, 8), (8, 15), (11, 6), (15, 19)])
     elif kind == "orb":
         A.oval(s, (160, 40, 70), (3, 5, 10, 10)); A.oval(s, (255, 140, 160), (5, 7, 4, 4))
-    _cache[("s", kind)] = _done(s)
-    return _cache[("s", kind)]
+    _cache[("s", kind, scale)] = _done(s, scale)
+    return _cache[("s", kind, scale)]
 
 
 def backdrop(stage, width=800, height=240):
@@ -332,5 +332,191 @@ def backdrop(stage, width=800, height=240):
         x, y = rng.randrange(width), rng.choice((0, 0, 122))
         for a in (0.3, 0.8, 1.3):
             pygame.draw.line(s, (150, 150, 160), (x, y), (x + math.cos(a) * 16, y + math.sin(a) * 16))
+    _cache[key] = s
+    return s
+
+
+# ---------------------------------------------------------------- full resolution (800 x 480) drawing
+K = 2.4                                # sprite size on the full screen: a little larger than twice the old one
+PAD = 3                                # room for the ink outline
+INK = (14, 10, 22)
+
+
+def inked(img, flash=False):
+    """A sprite with a dark outline round it, so it stands off any background. flash = solid white."""
+    mask = pygame.mask.from_surface(img, 60)
+    w, h = img.get_size()
+    out = pygame.Surface((w + 2 * PAD, h + 2 * PAD), pygame.SRCALPHA)
+    edge = mask.to_surface(setcolor=INK + (255,), unsetcolor=(0, 0, 0, 0))
+    for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2), (0, 3)):
+        out.blit(edge, (PAD + dx, PAD + dy))
+    out.blit(mask.to_surface(setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 0)) if flash else img, (PAD, PAD))
+    return out
+
+
+def hd_hunter(kind, pose="stand", frame=0, fire=False, face=1, size=K):
+    key = ("hh", kind, pose, frame, fire, face, size)
+    if key not in _cache:
+        img = inked(hunter(kind, pose, frame, fire, size))
+        _cache[key] = img if face > 0 else pygame.transform.flip(img, True, False)
+    return _cache[key]
+
+
+def hd_monster(kind, frame=0, scale=1.0, look=None, flash=False, face=-1, size=K):
+    key = ("hm", kind, frame, scale, look, flash, face, size)
+    if key not in _cache:
+        img = inked(monster(kind, frame, scale * size, look), flash)
+        _cache[key] = img if face < 0 else pygame.transform.flip(img, True, False)
+    return _cache[key]
+
+
+def hd_small(kind, flip=False, size=2.2):
+    key = ("hs", kind, flip, size)
+    if key not in _cache:
+        img = inked(small(kind, size))
+        _cache[key] = pygame.transform.flip(img, True, False) if flip else img
+    return _cache[key]
+
+
+def glow(radius, col):
+    """A soft round light, to be added onto the picture."""
+    key = ("glow", radius, col)
+    if key not in _cache:
+        s = pygame.Surface((radius * 2, radius * 2))
+        for r in range(radius, 0, -3):
+            k = (1 - r / float(radius)) ** 2
+            pygame.draw.circle(s, tuple(int(v * k) for v in col), (radius, radius), r)
+        _cache[key] = s
+    return _cache[key]
+
+
+def vignette():
+    """Darkness creeping in from the corners."""
+    if "vig" not in _cache:
+        small_s = pygame.Surface((100, 60), pygame.SRCALPHA)
+        for y in range(60):
+            for x in range(100):
+                d = math.hypot((x - 50) / 50.0, (y - 30) / 30.0)
+                small_s.set_at((x, y), (6, 4, 14, int(max(0.0, min(1.0, (d - 0.55) / 0.85)) * 190)))
+        _cache["vig"] = pygame.transform.smoothscale(small_s, (800, 480))
+    return _cache["vig"]
+
+
+THEMES = (   # wall top, wall bottom, trim, floor, accent light
+    ((44, 50, 70), (26, 28, 44), (70, 76, 100), (58, 60, 72), (120, 150, 220)),
+    ((74, 60, 62), (40, 30, 36), (110, 90, 86), (84, 70, 66), (230, 160, 110)),
+    ((50, 70, 70), (24, 36, 40), (84, 110, 108), (60, 80, 78), (130, 220, 190)),
+    ((34, 44, 70), (16, 20, 40), (60, 76, 116), (44, 54, 78), (150, 130, 240)),
+    ((70, 34, 48), (34, 14, 26), (130, 70, 80), (90, 44, 56), (240, 190, 90)),
+)
+
+
+def wall(stage, width=1600, height=416):
+    """The back wall of a floor at full resolution: stonework, tall arched windows with the moon outside and
+    its light falling in, pillars, and whatever the factory keeps on this floor."""
+    key = ("wall", stage)
+    if key in _cache:
+        return _cache[key]
+    rng = random.Random(70 + stage)
+    top, bottom, trim, _, light = THEMES[stage]
+    s = pygame.Surface((width, height))
+    for y in range(0, height, 2):
+        k = y / float(height)
+        pygame.draw.rect(s, tuple(int(a + (b - a) * k) for a, b in zip(top, bottom)), (0, y, width, 2))
+    for row in range(0, height, 26):                                   # stone courses
+        off = 0 if (row // 26) % 2 else 40
+        pygame.draw.line(s, _shade(bottom, 0.8), (0, row), (width, row))
+        for x in range(off, width, 80):
+            pygame.draw.line(s, _shade(bottom, 0.8), (x, row), (x, row + 26))
+            if rng.random() < 0.12:
+                pygame.draw.rect(s, _shade(top, 1.12), (x + 2, row + 2, 76, 22))
+    rays = pygame.Surface((width, height), pygame.SRCALPHA)
+    for x in range(0, width, 400):                                     # two windows and a pillar in every 400
+        for wx in (x + 70, x + 250):
+            pygame.draw.rect(s, _shade(trim, 0.7), (wx - 8, 60, 96, 220))
+            pygame.draw.ellipse(s, _shade(trim, 0.7), (wx - 8, 16, 96, 96))
+            night = pygame.Rect(wx, 68, 80, 204)
+            for y in range(night.top - 40, night.bottom, 2):
+                k = (y - night.top + 40) / 244.0
+                pygame.draw.rect(s, (int(14 + 30 * k), int(16 + 34 * k), int(44 + 60 * k)), (wx, y, 80, 2))
+            pygame.draw.polygon(s, _shade(trim, 0.7), [(wx, 28), (wx, 68), (wx + 6, 44), (wx + 20, 30)])
+            pygame.draw.polygon(s, _shade(trim, 0.7), [(wx + 80, 28), (wx + 80, 68), (wx + 74, 44), (wx + 60, 30)])
+            if wx == x + 70:
+                pygame.draw.circle(s, (250, 246, 220), (wx + 52, 96), 17)
+                pygame.draw.circle(s, (226, 220, 190), (wx + 46, 92), 4); pygame.draw.circle(s, (226, 220, 190), (wx + 58, 102), 3)
+            for _ in range(5):
+                pygame.draw.circle(s, (230, 230, 255), (wx + rng.randrange(6, 74), rng.randrange(50, 180)), 1)
+            for cx_, cy_ in ((wx + 14, 170), (wx + 44, 190)):          # drifting cloud
+                pygame.draw.ellipse(s, (60, 64, 104), (cx_, cy_, 40, 10))
+            pygame.draw.line(s, trim, (wx + 40, 30), (wx + 40, 272), 4)
+            for by in (120, 196):
+                pygame.draw.line(s, trim, (wx, by), (wx + 80, by), 4)
+            pygame.draw.rect(s, trim, (wx - 14, 272, 108, 10))
+            pygame.draw.polygon(rays, light + (26,), [(wx, 80), (wx + 80, 80), (wx + 190, height), (wx + 30, height)])
+        px = x + 180                                                   # the pillar
+        pygame.draw.rect(s, trim, (px, 0, 44, height))
+        pygame.draw.rect(s, _shade(trim, 1.25), (px + 4, 0, 8, height))
+        pygame.draw.rect(s, _shade(trim, 0.7), (px + 32, 0, 12, height))
+        pygame.draw.rect(s, _shade(trim, 1.1), (px - 8, 0, 60, 16)); pygame.draw.rect(s, _shade(trim, 1.1), (px - 8, height - 18, 60, 18))
+        bx = x + 330                                                   # what this floor keeps
+        base = height
+        if stage == 0:
+            for i, (dx, dy, sz) in enumerate(((0, 0, 56), (50, 0, 44), (14, -56, 44))):
+                r = pygame.Rect(bx + dx, base - sz + dy, sz, sz)
+                pygame.draw.rect(s, (124, 88, 52), r); pygame.draw.rect(s, (84, 58, 34), r, 4)
+                pygame.draw.line(s, (84, 58, 34), r.topleft, r.bottomright, 4); pygame.draw.line(s, (84, 58, 34), r.topright, r.bottomleft, 4)
+        elif stage == 1:
+            pygame.draw.rect(s, (120, 128, 140), (bx, base - 130, 70, 130), border_radius=6)
+            pygame.draw.rect(s, (80, 86, 98), (bx + 10, base - 70, 50, 70))
+            pygame.draw.rect(s, (60, 64, 74), (bx + 26, base - 150, 18, 24))
+            for i, col in enumerate(((230, 70, 70), (240, 200, 70), (90, 200, 110))):
+                pygame.draw.circle(s, col, (bx + 16 + i * 19, base - 108), 6)
+            for i in range(4):
+                pygame.draw.ellipse(s, (240, 240, 245), (bx + 76 + i * 12, base - 12, 10, 6))
+        elif stage == 2:
+            pygame.draw.rect(s, (56, 62, 72), (bx - 30, base - 36, 150, 10)); pygame.draw.rect(s, (40, 44, 52), (bx - 20, base - 26, 8, 26)); pygame.draw.rect(s, (40, 44, 52), (bx + 100, base - 26, 8, 26))
+            for i in range(6):
+                pygame.draw.rect(s, (190, 130, 60), (bx - 22 + i * 22, base - 66, 14, 30), border_radius=3)
+                pygame.draw.rect(s, (250, 250, 250), (bx - 19 + i * 22, base - 74, 8, 8)); pygame.draw.rect(s, (240, 236, 220), (bx - 21 + i * 22, base - 56, 12, 10))
+        elif stage == 3:
+            pygame.draw.rect(s, (56, 62, 82), (bx - 30, base - 44, 150, 10)); pygame.draw.rect(s, (40, 44, 60), (bx - 22, base - 34, 8, 34)); pygame.draw.rect(s, (40, 44, 60), (bx + 104, base - 34, 8, 34))
+            for i, col in enumerate(((120, 230, 160), (230, 120, 220), (120, 180, 250))):
+                fx = bx - 14 + i * 44
+                pygame.draw.polygon(s, (200, 220, 230), [(fx, base - 44), (fx + 30, base - 44), (fx + 20, base - 76), (fx + 20, base - 96), (fx + 10, base - 96), (fx + 10, base - 76)])
+                pygame.draw.polygon(s, col, [(fx + 3, base - 46), (fx + 27, base - 46), (fx + 21, base - 64), (fx + 9, base - 64)])
+                pygame.draw.circle(s, col, (fx + 15, base - 110 - i * 6), 3)
+        else:
+            pygame.draw.rect(s, (206, 164, 62), (bx, base - 250, 84, 108)); pygame.draw.rect(s, (40, 26, 40), (bx + 8, base - 242, 68, 92))
+            pygame.draw.ellipse(s, (214, 220, 226), (bx + 28, base - 226, 28, 34)); pygame.draw.polygon(s, (30, 20, 30), [(bx + 16, base - 152), (bx + 42, base - 196), (bx + 68, base - 152)])
+            pygame.draw.circle(s, (230, 40, 50), (bx + 36, base - 212), 3); pygame.draw.circle(s, (230, 40, 50), (bx + 48, base - 212), 3)
+            pygame.draw.rect(s, (120, 30, 40), (bx - 10, base - 110, 104, 110)); pygame.draw.rect(s, (160, 50, 60), (bx - 10, base - 110, 104, 14))
+    s.blit(rays, (0, 0))
+    for x in range(0, width, 200):                                     # cobwebs up in the corners
+        cx_ = x + rng.randrange(0, 60)
+        for a in (0.2, 0.6, 1.0, 1.4):
+            pygame.draw.line(s, (170, 170, 186), (cx_, 0), (cx_ + math.cos(a) * 46, math.sin(a) * 46))
+        for r in (16, 30, 44):
+            pygame.draw.arc(s, (170, 170, 186), (cx_ - r, -r, 2 * r, 2 * r), -1.45, -0.15, 1)
+    _cache[key] = s
+    return s
+
+
+def beams(stage, width=1200, height=70):
+    """Dark pipes and chains along the ceiling, nearer than the wall, so they slide past faster."""
+    key = ("beams", stage)
+    if key in _cache:
+        return _cache[key]
+    rng = random.Random(90 + stage)
+    s = pygame.Surface((width, height), pygame.SRCALPHA)
+    dark = (12, 10, 20)
+    pygame.draw.rect(s, dark, (0, 0, width, 12))
+    pygame.draw.rect(s, (30, 28, 44), (0, 12, width, 3))
+    for x in range(0, width, 150):
+        pygame.draw.rect(s, dark, (x + 20, 0, 14, 26))
+        length = rng.randrange(24, 60)
+        for y in range(14, length, 7):                                 # a hanging chain
+            pygame.draw.ellipse(s, dark, (x + 90, y, 6, 9), 2)
+        if rng.random() < 0.5:
+            pygame.draw.polygon(s, dark, [(x + 84, length), (x + 102, length), (x + 93, length + 12)])
     _cache[key] = s
     return s

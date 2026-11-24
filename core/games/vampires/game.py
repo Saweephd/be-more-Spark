@@ -15,7 +15,7 @@ import pygame
 from .. import common as c
 from ..alien_storm import hud
 from ..common import H, W, Game, text
-from . import art, cards, levels, scenes
+from . import art, cards, levels, scenes, view
 
 FLOOR = levels.FLOOR
 GRAV, JUMP = 900.0, -335.0
@@ -109,6 +109,7 @@ class Vampires(Game):
         self.scene = None
         self.cardview = None
         self.players, self.beasts, self.shots, self.drops, self.pops = [], [], [], [], []
+        self.sparks = []
         self.level = levels.build(0)
         self.cam = 0.0
         self.stage = 0
@@ -183,6 +184,7 @@ class Vampires(Game):
         self.level = levels.build(index)
         self.spawn_i = 0
         self.beasts, self.shots, self.drops, self.pops = [], [], [], []
+        self.sparks = []
         self.lamps = [list(p) for p in self.level["lamps"]]
         self.chests = [list(p) for p in self.level["chests"]]
         self.chest_cards = self.pick_cards(index)
@@ -364,6 +366,7 @@ class Vampires(Game):
             b.vx = push * (1 if b.x >= p.x else -1)
             b.stun = 0.25
         self.sfx("punch" if b.hp > 0 else "boom")
+        self.burst(b.x, b.y - b.h / 2, 5 if b.hp > 0 else 16, (255, 240, 180) if b.hp > 0 else ((200, 190, 220) if not b.boss else (255, 120, 140)))
         if b.hp <= 0:
             b.dead = True
             self.score += 2500 if b.boss else BEASTS[b.kind][2]
@@ -372,6 +375,13 @@ class Vampires(Game):
                 self.drops.append(dict(x=b.x, y=b.y - 12, kind="heart", vy=-90.0, floor=FLOOR if self.ground_at(b.x) else b.y))
             if p is not None and not b.boss and self.rng.random() < 0.1:
                 self.talk(p, self.rng.choice(QUIPS) if p.kind == "lucas" else None, 2.2)
+
+    def burst(self, x, y, count, col):
+        for _ in range(count):
+            a = self.rng.uniform(0, 6.283)
+            v = self.rng.uniform(30, 130)
+            life = self.rng.uniform(0.25, 0.55)
+            self.sparks.append([x, y, math.cos(a) * v, math.sin(a) * v - 30, life, life, col])
 
     def hurt(self, p, dmg, from_x, force=False):
         if p.out or ((p.inv > 0 or "bat" in p.fx) and not force):
@@ -652,181 +662,18 @@ class Vampires(Game):
             q[1] -= 26 * dt
             q[3] -= dt
         self.pops = [q for q in self.pops if q[3] > 0]
+        for q in self.sparks:
+            q[0] += q[2] * dt
+            q[1] += q[3] * dt
+            q[3] += 260 * dt
+            q[4] -= dt
+        self.sparks = [q for q in self.sparks if q[4] > 0]
 
-    # ------------------------------------------------------------ drawing
-    def draw(self, surf):
-        cam = int(self.cam) + (self.rng.choice((-2, 2)) if getattr(self, "shake", 0) > 0 and self.state == "play" else 0)
-        bg = art.backdrop(self.stage)
-        off = int(cam * 0.5) % bg.get_width()
-        surf.blit(bg, (-off, 0))
-        surf.blit(bg, (bg.get_width() - off, 0))
-        floor_col = ((70, 72, 80), (96, 84, 76), (80, 96, 90), (52, 62, 80), (90, 50, 60))[self.stage]
-        for a, b in self.level["ground"]:
-            if b > cam and a < cam + W:
-                pygame.draw.rect(surf, floor_col, (a - cam, FLOOR, b - a, H - FLOOR))
-                pygame.draw.rect(surf, tuple(min(255, v + 40) for v in floor_col), (a - cam, FLOOR, b - a, 3))
-        for a, b in zip(self.level["ground"], self.level["ground"][1:]):
-            pygame.draw.rect(surf, (10, 8, 16), (a[1] - cam, FLOOR, b[0] - a[1], H - FLOOR))
-        for lx, ly, lw in self.level["ledges"]:
-            if lx + lw > cam and lx < cam + W:
-                pygame.draw.rect(surf, (120, 124, 136), (lx - cam, ly, lw, 5))
-                pygame.draw.rect(surf, (70, 72, 84), (lx - cam, ly + 5, lw, 3))
-                for k in range(lx + 6, lx + lw, 22):
-                    pygame.draw.line(surf, (70, 72, 84), (k - cam, ly + 8), (k - cam, ly + 16))
-        for lamp in self.lamps:
-            surf.blit(art.small("lamp"), (lamp[0] - 8 - cam, lamp[1] - 20))
-        for chest in self.chests:
-            if chest:
-                surf.blit(art.small("chest"), (chest[0] - 8 - cam, chest[1] - 20))
-        for d in self.drops:
-            surf.blit(art.small(d["kind"]), (int(d["x"]) - 8 - cam, int(d["y"]) - 14))
-        for b in self.beasts:
-            img = art.monster(b.kind, int(b.t * 5) % 2, b.scale, b.look, b.flash > 0)
-            if b.face > 0:
-                img = c.flip(img)
-            surf.blit(img, (int(b.x) - img.get_width() // 2 - cam, int(b.y) - img.get_height() + 2))
-        for p in self.players:
-            if p.out or (p.inv > 0 and int(self.time * 20) % 2):
-                continue
-            if "bat" in p.fx:
-                img = art.hunter(p.kind, "bat", int(self.time * 10) % 2)
-            elif p.hurt_t > 0:
-                img = art.hunter(p.kind, "hurt")
-            elif p.attack_t > 0:
-                img = art.hunter(p.kind, "attack", 0, p.fire)
-            elif not p.ground:
-                img = art.hunter(p.kind, "jump")
-            elif abs(p.vx) > 1:
-                img = art.hunter(p.kind, "walk", int(p.walk_t * 9) % 4)
-            else:
-                img = art.hunter(p.kind, "stand")
-            x = int(p.x) - 20 - cam
-            if p.face < 0:
-                img = c.flip(img)
-                x = int(p.x) - (art.HW - 20) - cam
-            surf.blit(img, (x, int(p.y) - art.HH + 1))
-            if "garlic" in p.fx:
-                for i in range(8):
-                    a = self.time * 3 + i * math.pi / 4
-                    pygame.draw.circle(surf, (250, 240, 200), (int(p.x + math.cos(a) * 22) - cam, int(p.y - 20 + math.sin(a) * 22)), 2)
-            if "hallpass" in p.fx:
-                g = art.monster("ghost", int(self.time * 4) % 2, 0.7)
-                surf.blit(g, (int(p.x + math.cos(self.time * 2) * 30) - 10 - cam, int(p.y - 50 + math.sin(self.time * 3) * 6)))
-        for s in self.shots:
-            img = art.small(s["kind"])
-            surf.blit(img if s["vx"] < 0 else c.flip(img), (int(s["x"]) - 8 - cam, int(s["y"]) - (20 if s["kind"] == "wave" else 10)))
-        for q in self.pops:
-            text(surf, q[2], (int(q[0]) - cam, int(q[1])), 16, c.YELLOW, center=True)
-        if getattr(self, "dawn", 0) > 0:
-            glow = pygame.Surface((W, H), pygame.SRCALPHA)
-            glow.fill((255, 240, 170, int(220 * self.dawn / 0.6)))
-            surf.blit(glow, (0, 0))
-        self.draw_hud(surf)
-
-    def draw_hud(self, surf):
-        for p in self.players:
-            x0 = 6 if p.slot == 0 else W - 6 - 84
-            text(surf, p.d["title"] + ("  x%d" % p.lives if not p.out else "  out"), (x0, 3), 14)
-            for i in range(MAX_HP // 2):
-                full = p.hp - i * 2
-                col = (232, 70, 90) if full >= 2 else ((240, 160, 170) if full == 1 else (70, 60, 70))
-                pygame.draw.rect(surf, c.INK, (x0 + i * 11 - 1, 14, 10, 8))
-                pygame.draw.rect(surf, col, (x0 + i * 11, 15, 8, 6))
-            note = cards.info(p.card)[1] if p.card else ""
-            if p.staples:
-                note = (note + "  " if note else "") + "staples %d" % p.staples
-            for k, left in p.fx.items():
-                note = (note + "  " if note else "") + "%s %d" % (cards.info(k)[1], int(left) + 1)
-            if note:
-                text(surf, note, (x0, 25), 13, (255, 232, 120))
-        text(surf, "%d" % self.score, (W // 2, 3), 18, c.WHITE, center=True)
-        if len(self.players) == 1 and self.boss_on is False and int(self.time) % 6 < 2 and self.stage == 0 and self.cam < 200:
-            text(surf, "Second controller: press a button to join", (W // 2, 228), 13, c.WHITE, center=True)
-        bosses = [b for b in self.beasts if b.boss]
-        if bosses:
-            total = sum(b.max_hp for b in bosses)
-            left = sum(max(0, b.hp) for b in bosses)
-            pygame.draw.rect(surf, c.INK, (W // 2 - 81, H - 13, 162, 8))
-            pygame.draw.rect(surf, (200, 40, 60), (W // 2 - 80, H - 12, int(160 * left / float(total)), 6))
-        if self.banner_t > 0:
-            text(surf, self.banner, (W // 2, 60), 30, c.YELLOW, center=True)
-
-    def draw_title_art(self, surf):
-        bg = art.backdrop(4)
-        surf.blit(bg, (-int(self.time * 12) % bg.get_width() - bg.get_width(), 0))
-        surf.blit(bg, (-int(self.time * 12) % bg.get_width(), 0))
-        pygame.draw.rect(surf, (90, 50, 60), (0, FLOOR, W, H - FLOOR))
-        surf.blit(art.hunter("lucas", "stand"), (60, FLOOR - art.HH + 1))
-        surf.blit(art.monster("vampire", int(self.time * 3) % 2, 1.0, "chairman"), (300, FLOOR - 46))
-        surf.blit(art.monster("zombie", int(self.time * 3) % 2), (250, FLOOR - 42))
+    # ------------------------------------------------------------ drawing: all of it at full resolution (view.py)
+    hd_only = True
 
     def render(self, surf):
-        if self.state != "title":
-            return super().render(surf)
-        self.draw_title_art(surf)
-        shade = pygame.Surface((W, H), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 130))
-        surf.blit(shade, (0, 0))
-        text(surf, "Vampires,", (W // 2, 12), 40, self.title_color, center=True)
-        text(surf, "Oh Well...", (W // 2, 42), 40, self.title_color, center=True)
-        for i, line in enumerate(self.help_lines):
-            text(surf, line, (W // 2, 80 + i * 14), 16, c.WHITE, center=True)
-        rows = self.title_options()
-        for i, row in enumerate(rows):
-            if row == "level":
-                label = "Start at: %d. %s" % (self.level_choice + 1, self.levels[self.level_choice])
-            elif row == "mode":
-                label = "Level: %s" % self.modes[self.mode]
-            else:
-                label = "Player %s: %s" % ("two" if row == "p2" else "one", art.HUNTERS[self.p2_kind if row == "p2" else self.p1_kind]["title"])
-            text(surf, "<  %s  >" % label, (W // 2, 114 + 16 * i), 16, c.YELLOW if i == self.option_row else c.WHITE, center=True)
-        if int(self.time * 2) % 2 == 0:
-            text(surf, "Big button: start", (W // 2, 186), 20, c.YELLOW, center=True)
-        have = bin(self.found).count("1")
-        text(surf, "Triangle: card album (%d of %d)" % (have, len(cards.KEYS)), (W // 2, 206), 16, c.WHITE, center=True)
-        text(surf, "Best %d" % self.best, (W // 2, 224), 16, c.WHITE, center=True)
+        pass
 
     def render_hd(self, screen):
-        if self.state == "title":
-            if self.album is not None:
-                i, turn, _ = self.album
-                screen.fill((16, 10, 24))
-                hud.label(screen, "Card album", (400, 10), 34, (236, 196, 70), center=True, bold=True)
-                if self.found >> i & 1:
-                    cards.show(screen, cards.KEYS[i], turn, (400, 236))
-                else:
-                    back = cards.card_back()
-                    screen.blit(back, (400 - cards.CW // 2, 236 - cards.CH // 2))
-                    hud.label(screen, "Not found yet", (400, 222), 28, (255, 255, 255), center=True)
-                hud.label(screen, "%d of %d" % (i + 1, len(cards.KEYS)), (400, 420), 26, (255, 255, 255), center=True)
-                hud.label(screen, "Left and right: browse    Big button: turn over    Triangle: back", (400, 448), 24, (200, 190, 220), center=True)
-            return
-        if self.scene is not None:
-            self.scene.draw(screen)
-            return
-        if self.state == "over":
-            return
-        if self.cardview is not None:
-            v = self.cardview
-            shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-            shade.fill((10, 6, 20, 200))
-            screen.blit(shade, (0, 0))
-            hud.label(screen, "%s found a card!" % v["p"].d["title"], (400, 12), 34, (236, 196, 70), center=True, bold=True)
-            rise = min(1.0, v["t"] / 0.35)
-            cards.show(screen, v["key"], v["turn"], (400, int(244 + (1 - rise) * 260)))
-            if v["turn"] >= 0.99:
-                hud.label(screen, "Big button: back to work", (400, 440), 28, (255, 255, 255), center=True)
-            return
-        if self.say_t > 0 and self.say_line:
-            hero = next((p for p in self.players if p.kind == self.say_who and not p.out), None)
-            if hero is not None:
-                f = hud.font(24)
-                rows = hud.wrap(self.say_line, f, 280)
-                wide = max(f.size(r)[0] for r in rows) + 22
-                x = max(6, min(800 - wide - 6, int((hero.x - self.cam) * 2 - wide // 2)))
-                y = max(70, int(hero.y * 2) - 130 - 22 * len(rows))
-                box = pygame.Rect(x, y, wide, 14 + 22 * len(rows))
-                pygame.draw.rect(screen, (255, 255, 255), box, border_radius=9)
-                pygame.draw.rect(screen, (30, 26, 30), box, 2, border_radius=9)
-                for i, row in enumerate(rows):
-                    screen.blit(f.render(row, True, (30, 26, 30)), (x + 11, y + 7 + i * 22))
+        view.draw(self, screen)

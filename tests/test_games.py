@@ -347,6 +347,17 @@ class GameTests(unittest.TestCase):
         menu.step(DT, inp)
         self.assertEqual(menu.choice, "bmo_catch")
         menu.render(self.canvas)
+        screen = pygame.display.get_surface()
+        for index in (0, 5, len(menu.games) - 1):                 # the long list scrolls to keep the choice in view
+            menu.index = index
+            self.assertTrue(menu.first_row() <= index < menu.first_row() + menu.ROWS)
+            menu.render_hd(screen)
+        touch = common.Input()
+        menu.index = len(menu.games) - 1
+        touch.touch = (100, (menu.TOP + menu.ROW_H * 2 + 10) // 2)   # a finger on the third row shown
+        touch.down("a")
+        menu.step(DT, touch)
+        self.assertEqual(menu.games[len(menu.games) - menu.ROWS + 2][0], menu.choice)
 
     def test_triangle_no_longer_leaves_the_menu_but_minus_does(self):
         menu = launcher.Menu(scores_path=self.scores)
