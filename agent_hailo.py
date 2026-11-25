@@ -437,6 +437,9 @@ class BotGUI:
         elif self.current_state in [BotStates.IDLE, BotStates.SCREENSAVER]:
             print(f"[CLICK] Body: Manual Wake ({x},{y})")
             self.manual_wake_event.set()
+        elif self.current_state == BotStates.GAME:
+            print(f"[CLICK] Body: stop the game ({x},{y})")
+            self.stop_game("tap")
         else:
             print(f"[CLICK] Ignored in state {self.current_state} ({x},{y})")
 
@@ -666,10 +669,27 @@ class BotGUI:
             print("[KEY] Talk button")
             self.manual_wake_event.set()
 
+    def stop_game(self, why=""):
+        """End the game that is running. BMO's own screen only gets a tap or a button press during a game
+        when the game is on the TV (or has lost the screen), and then BMO looked frozen: its face was up
+        but nothing answered. A tap on the face or the triangle now brings BMO back."""
+        proc = getattr(self, "_game_proc", None)
+        if proc is None or proc.poll() is not None:
+            return False
+        print(f"[GAME] Stopped from BMO ({why})")
+        self._game_stopped = True
+        try:
+            proc.terminate()
+        except Exception as e:
+            print(f"[GAME] Could not stop it: {e}")
+        return True
+
     def on_key_cancel(self, event=None):
         """Triangle: stop music, and stop BMO talking for the rest of this turn."""
         self.last_user_interaction = time.time()
         print("[KEY] Cancel button")
+        if self.current_state == BotStates.GAME and self.stop_game("triangle"):
+            return
         self.stop_music()
         if self.current_state in [BotStates.SPEAKING, BotStates.THINKING]:
             self.cancel_event.set()
@@ -865,9 +885,13 @@ class BotGUI:
                 self.master.after(0, self.master.focus_force)
                 self.set_state(BotStates.IDLE, "Tap to speak")
                 try:
-                    if result is None:
+                    if result is None and getattr(self, "_game_stopped", False):
+                        self._game_stopped = False
+                        self.speak("Okay, games are off.")
+                    elif result is None:
                         self.speak("BMO could not start the game. Sorry!")
                     else:
+                        self._game_stopped = False
                         self.speak(extras.spoken_result(result))
                 finally:
                     self._release_busy()
