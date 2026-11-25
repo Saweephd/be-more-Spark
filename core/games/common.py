@@ -446,6 +446,9 @@ def open_screen():
     flags = 0 if os.environ.get("BMO_GAME_WINDOWED") else pygame.FULLSCREEN
     from core import tvmode
     os.environ.pop("SDL_VIDEO_WINDOW_POS", None)
+    # A desktop pop-up (the Pi's low voltage warning, for one) takes the focus for a moment. By default a
+    # full-screen game then shrinks itself away, which looked like the games menu dropping out.
+    os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
     if tvmode.use_tv() and pygame.display.get_num_displays() > 1:
         # TV mode is on and the TV is connected (ops/bmo_stream.py): play on the invisible second screen
         # the TV shows, which sits to the right of BMO's own. The desktop ignores a request to go full
