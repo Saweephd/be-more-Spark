@@ -372,6 +372,10 @@ def capsule_frames():
 
 
 def outlined_text(surf, font, msg, pos, col, outline=(20, 16, 24), center=True):
+    from . import common
+    if common.sharp(surf) and id(font) in common.FONT_SIZES:      # held back and drawn sharp at full size
+        common.sharp_add(msg, pos, common.FONT_SIZES[id(font)], col, center, edge=outline)
+        return
     img = font.render(msg, False, col)
     edge = font.render(msg, False, outline)
     x, y = pos

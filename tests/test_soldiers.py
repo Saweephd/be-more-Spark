@@ -204,6 +204,11 @@ class SoldiersTests(unittest.TestCase):
         self.assertEqual(g.unlocked, 3)
         inp = common.Input()
         self.frames(g, inp, 1, "a")
+        self.assertEqual(g.start_level, 1)                 # the first level is always the one offered
+        self.frames(g, inp, 1, "up")
+        self.frames(g, inp, 1, "up")
+        self.assertEqual(g.start_level, 3)
+        self.frames(g, inp, 1, "up")                       # but never past what has been reached
         self.assertEqual(g.start_level, 3)
         self.frames(g, inp, 1, "down")
         self.assertEqual(g.start_level, 2)

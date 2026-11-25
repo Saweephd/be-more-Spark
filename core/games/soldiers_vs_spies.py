@@ -69,6 +69,8 @@ class Soldiers(Game):
     help_lines = ("D-pad: run and aim   Big button: jump", "Triangle: fire (hold it down)",
                   "Second gamepad: press A to join in", "Accept your orders, soldier!")
     title_color = (130, 220, 120)
+    sharp_text = True                         # words drawn at full size, smooth
+    smooth_pixels = True                      # and the picture doubled with its stair-steps smoothed
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -85,7 +87,7 @@ class Soldiers(Game):
         self.win = False
         self.phase, self.pt = "select", 0.0
         self.choice = "miles"
-        self.start_level = self.unlocked
+        self.start_level = 1                  # always offer the first level; up picks a later one already reached
         self.level = self.start_level - 1
         self.players = []
         self.two = False

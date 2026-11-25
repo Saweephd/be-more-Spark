@@ -185,11 +185,51 @@ def flip(surf):
 _fonts = {}
 
 
+# ---------- sharp lettering ----------
+# A game drawn on the small canvas gets doubled, and doubled lettering looks coarse on a big TV. A game that
+# sets sharp_text = True has its words held back here and drawn afterwards at full size, smoothly.
+SHARP = {"canvas": None, "queue": []}
+FONT_SIZES = {}                                # id(font) -> point size, for fonts that may be drawn sharp
+_big_fonts = {}
+
+
+def sharp(surf):
+    """True if words drawn on surf this frame should be held back and drawn sharp."""
+    return surf is not None and surf is SHARP["canvas"]
+
+
+def sharp_add(msg, pos, size, color, center=False, edge=None, shadow=False):
+    SHARP["queue"].append((str(msg), pos, size, color, center, edge, shadow))
+
+
+def sharp_flush(screen):
+    """Draw the held-back words on the full-size screen at twice the size, with smooth edges."""
+    for msg, (x, y), size, color, center, edge, shadow in SHARP["queue"]:
+        font = _big_fonts.get(size)
+        if font is None:
+            font = _big_fonts[size] = pygame.font.Font(None, size * SCALE)
+        img = font.render(msg, True, color)
+        x, y = int(x * SCALE), int(y * SCALE)
+        if center:
+            x -= img.get_width() // 2
+        if edge is not None:
+            dark = font.render(msg, True, edge)
+            for dx, dy in ((-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, -2), (-2, 2), (2, 2), (3, 4)):
+                screen.blit(dark, (x + dx, y + dy))
+        elif shadow:
+            screen.blit(font.render(msg, True, INK), (x + 2, y + 2))
+        screen.blit(img, (x, y))
+    SHARP["queue"] = []
+
+
 def text(surf, msg, pos, size=16, color=WHITE, center=False, shadow=True):
     """Draw text without smoothing so it stays crisp when doubled."""
     font = _fonts.get(size)
     if font is None:
         font = _fonts[size] = pygame.font.Font(None, size)
+    if sharp(surf):
+        sharp_add(msg, pos, size, color, center, shadow=shadow)
+        return font.size(str(msg))[0]
     img = font.render(str(msg), False, color)
     x, y = pos
     if center:
@@ -493,12 +533,19 @@ def run(game, screen=None, max_frames=None):
             went_home = True                          # the controller's home button: straight back to the games menu
             running = False
         game.step(dt, inp)
+        SHARP["canvas"], SHARP["queue"] = (canvas if getattr(game, "sharp_text", False) else None), []
         game.render(canvas)
         if start_held > 0.4:
             pygame.draw.rect(canvas, INK, (W // 2 - 62, H - 16, 124, 10))
             pygame.draw.rect(canvas, YELLOW, (W // 2 - 60, H - 14, int(120 * min(1, start_held / QUIT_HOLD_S)), 6))
         if not getattr(game, "hd_only", False):
-            pygame.transform.scale(canvas, screen.get_size(), screen)
+            if getattr(game, "smooth_pixels", False) and screen.get_size() == (W * 2, H * 2):
+                pygame.transform.scale2x(canvas, screen)          # doubles with the stair-steps smoothed off
+            else:
+                pygame.transform.scale(canvas, screen.get_size(), screen)
+        if SHARP["canvas"] is not None:
+            sharp_flush(screen)
+            SHARP["canvas"] = None
         hd = getattr(game, "render_hd", None)        # sharp full resolution extras, drawn over the doubled picture
         if hd is not None:
             hd(screen)

@@ -24,7 +24,18 @@ def font(size):
     f = _fonts.get(size)
     if f is None:
         f = _fonts[size] = pygame.font.Font(None, size)
+        from . import common
+        common.FONT_SIZES[id(f)] = size
     return f
+
+
+def plain(surf, msg, pos, size, col):
+    """Words with no outline (on paper): sharp when the game asks for sharp lettering."""
+    from . import common
+    if common.sharp(surf):
+        common.sharp_add(msg, pos, size, col)
+    else:
+        surf.blit(font(size).render(msg, False, col), pos)
 
 
 def say(surf, msg, pos, size=18, col=(255, 255, 255), center=True, outline=OUT):
@@ -859,8 +870,7 @@ def scene_briefing(surf, t, players, level, lines):
         part = line[:max(0, shown)]
         shown -= len(line)
         size = 20 if line == "ORDERS" else 15
-        img = font(size).render(part, False, (30, 30, 40))
-        surf.blit(img, (paper.x + 10, y))
+        plain(surf, part, (paper.x + 10, y), size, (30, 30, 40))
         y += 15 if line else 8
     _mission_map(surf, pygame.Rect(256, 20, 136, 110), level, t)
     photo = pygame.Rect(270, 142, 64, 72)       # the spymaster's photo, clipped on
