@@ -337,7 +337,7 @@ class GameTests(unittest.TestCase):
     # ----- menu -----
     def test_menu_lists_and_picks(self):
         menu = launcher.Menu(scores_path=self.scores)
-        self.assertEqual([n for n, _ in menu.games], list(GAMES))
+        self.assertEqual([n for n, _ in menu.games], list(GAMES) + [launcher.EXIT])
         inp = common.Input()
         inp.down("down")
         menu.step(DT, inp)
@@ -358,6 +358,24 @@ class GameTests(unittest.TestCase):
         touch.down("a")
         menu.step(DT, touch)
         self.assertEqual(menu.games[len(menu.games) - menu.ROWS + 2][0], menu.choice)
+
+    def test_menu_can_be_left_without_a_controller(self):
+        menu = launcher.Menu(scores_path=self.scores)
+        inp = common.Input()
+        inp.down("start")                                   # the small button alone starts nothing: holding it leaves
+        menu.step(DT, inp)
+        self.assertIsNone(menu.choice)
+        self.assertFalse(menu.done)
+        inp.end_frame(); inp.up("start")
+        inp.down("up")                                      # up from the top wraps to the last row: Leave games
+        menu.step(DT, inp)
+        inp.end_frame(); inp.up("up")
+        self.assertEqual(menu.games[menu.index][0], launcher.EXIT)
+        menu.render_hd(pygame.display.get_surface())
+        inp.down("a")
+        menu.step(DT, inp)
+        self.assertTrue(menu.done)
+        self.assertIsNone(menu.choice)
 
     def test_triangle_no_longer_leaves_the_menu_but_minus_does(self):
         menu = launcher.Menu(scores_path=self.scores)

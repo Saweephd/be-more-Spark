@@ -20,9 +20,14 @@ def available():
     return out
 
 
+EXIT = "__exit__"                                    # not a game: the menu's own way out
+
+
 class Menu:
     def __init__(self, games=None, scores_path=None):
         self.games = games if games is not None else available()
+        if self.games:
+            self.games = list(self.games) + [(EXIT, "Leave games")]
         self.index = 0
         self.choice = None
         self.done = False
@@ -57,9 +62,12 @@ class Menu:
             row = (inp.touch[1] * 2 - self.TOP) // self.ROW_H
             if 0 <= row < min(self.ROWS, len(self.games)):
                 self.index = self.first_row() + row
-        if "a" in inp.pressed or "start" in inp.pressed:
+        if "a" in inp.pressed:                       # the small button no longer starts a game: holding it leaves
             self.choice = self.games[self.index][0]
             self.sound.play("select")
+            if self.choice == EXIT:                   # the last row, for leaving with BMO's own buttons or a finger
+                self.choice = None
+                self.done = True
         if "back" in inp.pressed:                    # the minus (select) button; the triangle no longer leaves,
             self.done = True                          # because it was pressed by accident too often
             self.sound.play("back")
@@ -94,6 +102,14 @@ class Menu:
             name, title = self.games[i]
             y = self.TOP + row * self.ROW_H
             sel = i == self.index
+            if name == EXIT:
+                r = pygame.Rect(16 if sel else 40, y, 768 if sel else 720, self.ROW_H - 6)
+                if sel:
+                    pygame.draw.rect(screen, (255, 255, 255), r.inflate(8, 8), border_radius=14)
+                pygame.draw.rect(screen, (236, 96, 90) if sel else (110, 50, 56), r, border_radius=12)
+                hud.label(screen, "Leave games", (r.centerx, y + (6 if sel else 9)), 44 if sel else 36,
+                          (255, 255, 255), center=True, bold=sel)
+                continue
             r = pygame.Rect(16 if sel else 40, y, 768 if sel else 720, self.ROW_H - 6)
             if sel:
                 pygame.draw.rect(screen, (255, 255, 255), r.inflate(8, 8), border_radius=14)
@@ -110,14 +126,13 @@ class Menu:
         if first + self.ROWS < len(self.games):
             yb = self.TOP + self.ROWS * self.ROW_H - 2
             pygame.draw.polygon(screen, (255, 255, 255), [(388, yb), (412, yb), (400, yb + 12)])
-        hud.label(screen, "%d of %d" % (self.index + 1, len(self.games)), (780 - 90, 444), 24, (170, 210, 210), shadow=False)
         note = tvmode.hint() or self.message
         if note:
             f = hud.font(24)
             while f.size(note)[0] > 330 and len(note) > 8:
                 note = note[:-4] + "..."
             hud.label(screen, note, (380, 22), 24, c.YELLOW if tvmode.hint() else (255, 255, 255), center=True)
-        hud.label(screen, "Big button: play     Left/right: TV     Minus: leave", (400, 444), 24, (255, 255, 255), center=True)
+        hud.label(screen, "Big button: choose     Left/right: TV     Hold small button, or minus: leave", (400, 444), 24, (255, 255, 255), center=True)
 
 
 def run_menu(screen=None, max_frames=None):
