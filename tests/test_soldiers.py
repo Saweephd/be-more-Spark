@@ -304,6 +304,58 @@ class PadTests(unittest.TestCase):
         self.assertTrue(g.hit_boss({"x": port.centerx, "y": sv.GROUND - 22}))
         self.assertEqual(g.boss["hp"], before - 1)
 
+    def test_a_real_shot_from_across_the_screen_hurts_the_bunker(self):
+        """A bullet flown frame by frame from a hero standing well back must get through a slit."""
+        g = sv.make(seed=1, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        g.reset()
+        g.level = next(i for i, lv in enumerate(sv.LEVELS) if lv["boss"] == "bunker")
+        g.length = sv.LEVELS[g.level]["length"]
+        g.start_boss()
+        r = g.boss_rect()
+        for height in (22, 17):                                   # Miles's rifle, then Felix's
+            before = g.boss["hp"]
+            bullet = {"x": r.x - 200.0, "y": float(sv.GROUND - height)}
+            for _ in range(200):
+                bullet["x"] += 5.3                                   # a bullet's step each frame
+                if g.hit_boss(bullet):
+                    break
+            self.assertEqual(g.boss["hp"], before - 1, height)
+        self.assertTrue(g.hit_boss({"x": r.x + 3.0, "y": float(r.y + 10)}))      # the wall above the slits stops shots
+        self.assertEqual(g.boss["hp"], before - 1)
+
+    def test_the_sniper_tower_fires_falls_and_is_manned_again(self):
+        g = sv.make(seed=1, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        inp = common.Input()
+        g.reset()
+        g.phase = "play"
+        g.players = [g.new_player("miles", 0)]
+        g.players[0].update(chute=False, y=float(sv.GROUND))
+        g.level = next(i for i, lv in enumerate(sv.LEVELS) if lv["boss"] == "bunker")
+        g.length = sv.LEVELS[g.level]["length"]
+        g.cam = float(g.length - common.W)
+        g.players[0]["x"] = g.cam + 60
+        g.start_boss()
+        tw = g.boss["tower"]
+        self.assertEqual(tw["state"], "manned")
+        for _ in range(60 * 4):
+            g.update_tower(1 / 60)
+        self.assertTrue(any(b.get("missile") for b in g.ebullets))
+        gun = g.gunner_rect()
+        for _ in range(sv.TOWER_HP):
+            self.assertTrue(g.hit_boss({"x": gun.centerx, "y": gun.centery}))
+        self.assertEqual(tw["state"], "empty")
+        self.assertFalse(g.hit_boss({"x": gun.centerx, "y": gun.centery}))       # nobody there to hit
+        g.ebullets = []
+        for _ in range(int(60 * (sv.TOWER_EMPTY_S + 0.2))):
+            g.update_tower(1 / 60)
+        self.assertEqual(tw["state"], "climb")
+        self.assertEqual(g.ebullets, [])                                         # he cannot fire from the ladder
+        for _ in range(int(60 * (sv.TOWER_CLIMB_S + 0.2))):
+            g.update_tower(1 / 60)
+        self.assertEqual((tw["state"], tw["hp"]), ("manned", sv.TOWER_HP))
+        canvas = pygame.Surface((common.W, common.H))
+        g.draw_boss(canvas, g.cam)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -60,6 +60,7 @@ POINTS = {"runner": 100, "shooter": 200, "drone": 150, "jeep": 300, "sled": 250,
 HP = {"runner": 1, "shooter": 2, "drone": 1, "jeep": 3, "sled": 2, "boat": 3, "turret": 6, "capsule": 1}
 LEDGE_1, LEDGE_2 = 160, 114
 UNLOCK_KEY = "soldiers_vs_spies_level"
+TOWER_HP, TOWER_EMPTY_S, TOWER_CLIMB_S = 4, 4.0, 1.6          # the bunker's sniper tower
 
 
 class Soldiers(Game):
@@ -591,9 +592,10 @@ class Soldiers(Game):
                      "ports": [18, 18, 18] if kind == "bunker" else None}
         if kind == "bunker":
             self.boss["hp"] = self.boss["max"] = 54
+            self.boss["tower"] = {"state": "manned", "hp": TOWER_HP, "t": 0.0, "cool": 2.5}
         self.boss_on = True
         self.sound.music("soldiers_boss")
-        self.banner = ("SHOOT THE THREE RED LIGHTS!", 3.5) if kind == "bunker" else ("BOSS!", 2.0)
+        self.banner = ("SHOOT THE RED LIGHTS! WATCH THE TOWER!", 3.5) if kind == "bunker" else ("BOSS!", 2.0)
 
     def boss_rect(self):
         b = self.boss
@@ -604,11 +606,102 @@ class Soldiers(Game):
         # at rifle height for both heroes standing: the slits used to sit above it, so level shots hit only wall
         return [pygame.Rect(r.x + 12 + i * 22, r.y + 40, 16, 16) for i in range(3)]
 
+    def tower_top(self):
+        """Where the gunner stands in the sniper tower over the bunker: (x, floor height)."""
+        r = self.boss_rect()
+        return r.centerx + 16, r.y - 30
+
+    def gunner_rect(self):
+        """The man in the tower, or on the ladder on his way up."""
+        tw = self.boss["tower"]
+        x, floor = self.tower_top()
+        if tw["state"] == "climb":
+            k = 1.0 - max(0.0, tw["t"]) / TOWER_CLIMB_S
+            return pygame.Rect(x - 20, int(self.boss_rect().y - 18 - (self.boss_rect().y - floor) * k), 10, 18)
+        return pygame.Rect(x - 7, floor - 18, 14, 18)
+
+    def update_tower(self, dt):
+        tw = self.boss["tower"]
+        if tw["state"] == "empty":
+            tw["t"] -= dt
+            if tw["t"] <= 0:
+                tw.update(state="climb", t=TOWER_CLIMB_S, hp=TOWER_HP)
+        elif tw["state"] == "climb":
+            tw["t"] -= dt
+            if tw["t"] <= 0:
+                tw.update(state="manned", cool=1.2)
+        else:
+            tw["cool"] -= dt
+            if tw["cool"] <= 0:
+                tw["cool"] = max(1.6, 3.0 - 0.2 * self.level)
+                x, floor = self.tower_top()
+                p = self.nearest_player(x, targetable=True)
+                if p is not None:
+                    tx, ty = p["x"], p["y"] - p["hero"]["height"] * 0.5
+                    d = math.hypot(tx - (x - 12), ty - (floor - 12)) or 1
+                    self.ebullets.append({"x": x - 12.0, "y": floor - 12.0, "vx": (tx - (x - 12)) / d * 105,
+                                          "vy": (ty - (floor - 12)) / d * 105, "g": 0.0, "missile": True})
+                    self.sfx("eshot")
+
+    def draw_tower(self, surf, cam):
+        tw = self.boss["tower"]
+        r = self.boss_rect()
+        x, floor = self.tower_top()
+        x -= cam
+        steel, dark = (96, 102, 116), (52, 56, 68)
+        for lx in (x - 12, x + 12):                                # legs and braces
+            pygame.draw.line(surf, art.OUT, (lx, floor), (lx, r.y + 2), 5)
+            pygame.draw.line(surf, steel, (lx, floor), (lx, r.y + 2), 3)
+        pygame.draw.line(surf, dark, (x - 12, floor + 2), (x + 12, r.y), 2)
+        pygame.draw.line(surf, dark, (x + 12, floor + 2), (x - 12, r.y), 2)
+        for ry in range(int(floor) + 4, int(r.y), 5):               # the ladder up the near side
+            pygame.draw.line(surf, (150, 130, 90), (x - 23, ry), (x - 16, ry))
+        pygame.draw.line(surf, (110, 92, 60), (x - 23, floor - 2), (x - 23, r.y), 1)
+        pygame.draw.line(surf, (110, 92, 60), (x - 16, floor - 2), (x - 16, r.y), 1)
+        g = self.gunner_rect().move(-cam, 0)
+        if tw["state"] != "empty":                                  # the gunner: helmet, face, coat, launcher
+            coat = THEMES[self.theme()]["guard"]
+            pygame.draw.rect(surf, art.OUT, g.inflate(2, 2))
+            pygame.draw.rect(surf, coat, (g.x, g.y + 7, g.w, g.h - 7))
+            pygame.draw.rect(surf, (226, 180, 140), (g.x + 2, g.y + 3, g.w - 4, 5))
+            pygame.draw.rect(surf, (60, 70, 60), (g.x, g.y, g.w, 4))
+            if tw["state"] == "manned":
+                pygame.draw.rect(surf, art.OUT, (g.x - 12, g.y + 6, 16, 6))
+                pygame.draw.rect(surf, (70, 90, 70), (g.x - 11, g.y + 7, 14, 4))
+                if tw["cool"] < 0.5 and int(self.time * 16) % 2:    # a warning blink before he fires
+                    pygame.draw.circle(surf, (255, 80, 60), (g.x - 12, g.y + 9), 3)
+        pygame.draw.rect(surf, art.OUT, (x - 17, floor - 1, 34, 7))  # the platform and its sandbag wall
+        pygame.draw.rect(surf, steel, (x - 16, floor, 32, 5))
+        for i in range(4):
+            pygame.draw.ellipse(surf, art.OUT, (x - 17 + i * 8, floor - 8, 10, 8))
+            pygame.draw.ellipse(surf, (176, 156, 110), (x - 16 + i * 8, floor - 7, 8, 6))
+        pygame.draw.line(surf, art.OUT, (x - 14, floor - 24), (x - 14, floor - 6), 3)   # posts and a tin roof
+        pygame.draw.line(surf, art.OUT, (x + 14, floor - 24), (x + 14, floor - 6), 3)
+        pygame.draw.polygon(surf, art.OUT, [(x - 20, floor - 23), (x + 20, floor - 23), (x + 15, floor - 31), (x - 15, floor - 31)])
+        pygame.draw.polygon(surf, (150, 60, 50), [(x - 18, floor - 24), (x + 18, floor - 24), (x + 14, floor - 30), (x - 14, floor - 30)])
+
     def hit_boss(self, bullet):
         b = self.boss
         if b["kind"] == "bunker":
-            for i, pr in enumerate(self.port_rects()):
-                if b["ports"][i] > 0 and pr.collidepoint(bullet["x"], bullet["y"]):
+            tw = b["tower"]
+            if tw["state"] != "empty" and self.gunner_rect().collidepoint(bullet["x"], bullet["y"]):
+                tw["hp"] -= 1
+                self.sfx("tick")
+                if tw["hp"] <= 0:                              # the tower stands empty until the next man climbs up
+                    g = self.gunner_rect()
+                    self.boom(g.centerx, g.centery, True)
+                    self.sfx("boom")
+                    self.score += 300
+                    tw.update(state="empty", t=TOWER_EMPTY_S)
+                return True
+            r, ports = self.boss_rect(), self.port_rects()
+            if r.collidepoint(bullet["x"], bullet["y"]) and ports[0].top - 2 <= bullet["y"] <= ports[0].bottom + 2:
+                # A shot at slit height goes in through the nearest slit still firing. (The slits used to need a
+                # bullet to land exactly inside one, and the front wall swallowed every shot from a distance.)
+                live = [i for i in range(3) if b["ports"][i] > 0]
+                if live:
+                    i = min(live, key=lambda k: abs(ports[k].centerx - bullet["x"]))
+                    pr = ports[i]
                     b["ports"][i] -= 1
                     b["hp"] = sum(b["ports"])
                     b["flash"] = 0.08
@@ -674,6 +767,7 @@ class Soldiers(Game):
                                           "vy": math.sin(r) * 130, "g": 0.0})
                 self.sfx("eshot")
         elif k == "bunker":
+            self.update_tower(dt)
             if b["cool"] <= 0:
                 b["cool"] = rate * 0.7
                 live = [i for i, hp in enumerate(b["ports"]) if hp > 0]
@@ -795,6 +889,15 @@ class Soldiers(Game):
                 surf.set_at((x, y), (255, 255, 255))
         for b in self.ebullets:
             x, y = int(b["x"] - cam), int(b["y"])
+            if b.get("missile"):                                    # a rocket from the tower: body, red nose, flame
+                a = math.atan2(b["vy"], b["vx"])
+                dx, dy = math.cos(a), math.sin(a)
+                pygame.draw.line(surf, art.OUT, (x - dx * 6, y - dy * 6), (x + dx * 6, y + dy * 6), 6)
+                pygame.draw.line(surf, (200, 204, 214), (x - dx * 5, y - dy * 5), (x + dx * 3, y + dy * 3), 4)
+                pygame.draw.line(surf, (230, 60, 50), (x + dx * 3, y + dy * 3), (x + dx * 6, y + dy * 6), 4)
+                flame = 4 + int(self.time * 30) % 4
+                pygame.draw.line(surf, (255, 200, 80), (x - dx * 6, y - dy * 6), (x - dx * (6 + flame), y - dy * (6 + flame)), 3)
+                continue
             pygame.draw.circle(surf, art.OUT, (x, y), 3)
             pygame.draw.circle(surf, (240, 50, 40), (x, y), 2)
             surf.set_at((x - 1, y - 1), (255, 220, 200))
@@ -907,6 +1010,8 @@ class Soldiers(Game):
             y = r.bottom - img.get_height() + 6
         else:
             y = r.centery - img.get_height() / 2
+        if k == "bunker":
+            self.draw_tower(surf, cam)
         surf.blit(img, (int(x), int(y)))
         if k == "bunker":
             for i, pr in enumerate(self.port_rects()):
