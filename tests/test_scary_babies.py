@@ -137,6 +137,23 @@ class ScaryBabiesTests(unittest.TestCase):
     def test_voice(self):
         self.assertEqual(extras.match_game("play scary babies"), "scary_babies")
 
+    def test_stephen_has_things_to_say(self):
+        for line in ("Hey Victor, come look at this...", "AI can't do my job.", "First thing tomorrow, Lynn is out of here..."):
+            self.assertIn(line, sb.STEPHEN_LINES)
+        heard = set()
+        for _ in range(60 * 40):
+            self.game.safe = 999
+            self.game.step(DT, self.inp)
+            self.inp.end_frame()
+            if self.game.quip_t > 0:
+                heard.add(self.game.quip)
+        self.assertGreaterEqual(len(heard & set(sb.STEPHEN_LINES)), 3)
+        self.game.say("First thing tomorrow, Lynn is out of here...")
+        self.game.px = common.W - 4                       # the bubble stays on the screen at the edge
+        self.game.render(self.canvas)
+        self.game.lose_life()
+        self.assertIn(self.game.quip, sb.STEPHEN_OUCH)
+
 
 if __name__ == "__main__":
     unittest.main()

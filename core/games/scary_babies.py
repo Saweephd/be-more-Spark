@@ -95,6 +95,21 @@ _BOSS_ROWS = [
 BOSS = [r.center(22, ".") for r in _BOSS_ROWS]
 
 
+# Things Stephen mutters on his way up. The first three are Stan's.
+STEPHEN_LINES = (
+    "Hey Victor, come look at this...",
+    "AI can't do my job.",
+    "First thing tomorrow, Lynn is out of here...",
+    "Not bad for an old man.",
+    "Nobody said anything about babies.",
+    "I bet Miles and Felix put them up to this.",
+    "This is NOT in my job description.",
+    "Who is watching these kids?",
+)
+STEPHEN_BONK = ("Sorry, kid.", "Nap time!", "Tell your friends.")
+STEPHEN_OUCH = ("They BITE?", "I'm too old for this.", "Okay, that one was fast.")
+
+
 class ScaryBabies(Game):
     levels = tuple("Board %d" % (i + 1) for i in range(8))
     name = "scary_babies"
@@ -114,6 +129,7 @@ class ScaryBabies(Game):
         self.baby_frames = [pygame.transform.rotate(base, a) for a in (0, 90, 180, 270)]
         self.boss = sprite(BOSS, KPAL, 2)
         self.life_icon = sprite(STEPHEN_TOP[:8], PAL)
+        self.quip, self.quip_t, self.quip_cool, self.quip_left = "", 0.0, 4.0, []
         self.reset()
 
     # ----- setup -----
@@ -156,8 +172,35 @@ class ScaryBabies(Game):
         return min(0.55, 0.2 + 0.07 * (self.board - 1))
 
     # ----- update -----
+    def say(self, line, seconds=2.6):
+        self.quip, self.quip_t = line, seconds
+
+    def update_quips(self, dt):
+        self.quip_t = max(0.0, self.quip_t - dt)
+        self.quip_cool -= dt
+        if self.quip_cool <= 0 and self.quip_t <= 0 and self.state_p not in ("dying", "cleared"):
+            if not self.quip_left:                              # every line once before any repeats
+                self.quip_left = list(STEPHEN_LINES)
+                self.rng.shuffle(self.quip_left)
+            self.say(self.quip_left.pop(), 3.2)
+            self.quip_cool = self.rng.uniform(7.0, 11.0)
+
+    def draw_quip(self, surf):
+        if self.quip_t <= 0 or not self.quip:
+            return
+        font = c._fonts.get(16) or pygame.font.Font(None, 16)
+        w = font.size(self.quip)[0] + 10
+        x = max(3, min(W - w - 3, int(self.px) - w // 2))
+        y = max(16, int(self.py) - 40)
+        pygame.draw.rect(surf, c.INK, (x - 1, y - 1, w + 2, 15), border_radius=4)
+        pygame.draw.rect(surf, (255, 255, 255), (x, y, w, 13), border_radius=4)
+        tx = max(x + 6, min(x + w - 6, int(self.px)))
+        pygame.draw.polygon(surf, (255, 255, 255), [(tx - 3, y + 12), (tx + 3, y + 12), (tx, y + 17)])
+        text(surf, self.quip, (x + 5, y + 2), 16, c.INK, shadow=False)
+
     def update(self, dt, inp):
         self.timer += dt
+        self.update_quips(dt)
         self.pops = [[x, y - 20 * dt, m, t - dt] for x, y, m, t in self.pops if t > dt]
         if self.state_p == "dying":
             self.anim += dt
@@ -349,6 +392,8 @@ class ScaryBabies(Game):
             self.score += 300
             self.sfx("bonk")
             self.pops.append([bx, by - 10, "WAAH! 300", 1.0])
+            if self.rng.random() < 0.5:
+                self.say(self.rng.choice(STEPHEN_BONK), 1.6)
             return
         if touching and self.safe <= 0:
             self.lose_life()
@@ -364,6 +409,7 @@ class ScaryBabies(Game):
         self.redflash = 0.5
         self.lives -= 1
         self.state_p, self.anim = "dying", 0.0
+        self.say(self.rng.choice(STEPHEN_OUCH), 1.6)
         self.sfx("hurt" if self.lives > 0 else "giggle")
 
     # ----- draw -----
@@ -429,6 +475,7 @@ class ScaryBabies(Game):
             surf.blit(self.life_icon, (W - 112 - i * 14, 16))
         if self.state_p == "cleared":
             text(surf, "BOARD CLEAR!", (W // 2, 96), 34, c.YELLOW, center=True)
+        self.draw_quip(surf)
 
     def glow(self, surf, x, y, r, col, alpha):
         g = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
