@@ -286,7 +286,9 @@ class PadTests(unittest.TestCase):
         g.unlocked, g.level_choice = 5, 3
         inp = common.Input()
         inp.down("a"); g.step(1 / 60, inp); inp.end_frame(); inp.up("a")
+        g.reset()
         g.level = next(i for i, lv in enumerate(sv.LEVELS) if lv["boss"] == "bunker")
+        g.length = sv.LEVELS[g.level]["length"]
         g.start_boss()
         port = g.port_rects()[0]
         for who in ("miles", "felix"):
