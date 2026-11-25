@@ -344,14 +344,14 @@ class Vampires(Game):
                 p.struck.add(id(b))
                 self.wound(b, dmg, p)
         for lamp in list(self.lamps):
-            if rect.collidepoint(lamp[0], lamp[1] - 10):
+            if rect.colliderect(pygame.Rect(lamp[0] - 7, lamp[1] - 20, 14, 20)):
                 self.lamps.remove(lamp)
                 self.sfx("gem")
                 self.score += 20
                 if self.rng.random() < 0.45:
                     self.drops.append(dict(x=float(lamp[0]), y=float(lamp[1]) - 12, kind="heart", vy=-90.0, floor=lamp[1]))
         for i, chest in enumerate(self.chests):
-            if chest and rect.collidepoint(chest[0], chest[1] - 8):
+            if chest and rect.colliderect(pygame.Rect(chest[0] - 10, chest[1] - 20, 20, 20)):
                 self.drops.append(dict(x=float(chest[0]), y=float(chest[1]) - 14, kind="card", vy=-150.0, floor=chest[1],
                                        card=self.chest_cards[i % len(self.chest_cards)]))
                 self.chests[i] = None

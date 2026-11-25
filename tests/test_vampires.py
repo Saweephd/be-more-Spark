@@ -120,6 +120,27 @@ class TestVampires(unittest.TestCase):
         saved = common.load_scores(g.scores_path)
         self.assertEqual(saved["vampires_cards"], g.found)
 
+    def test_a_swing_from_the_same_floor_opens_a_chest_and_the_card_can_be_picked_up(self):
+        g, inp = new()
+        g.level["spawns"] = []
+        p = g.players[0]
+        for side in (1, -1):                                     # from the left of it, then from the right
+            g.chests = [[int(p.x) + side * 24, levels.FLOOR], None]
+            g.drops = []
+            p.face, p.cool = side, 0.0
+            inp.pressed = {"b"}
+            g.step(1 / 60, inp)
+            inp.pressed = set()
+            self.assertIsNone(g.chests[0], side)
+            self.assertEqual([d["kind"] for d in g.drops], ["card"])
+            run(g, inp, 0.5)
+        inp.held = {"left"}
+        for _ in range(120):
+            g.step(1 / 60, inp)
+            if g.cardview:
+                break
+        self.assertIsNotNone(g.cardview)
+
     def test_each_card_does_what_it_says(self):
         g, inp = new()
         p = g.players[0]
