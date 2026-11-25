@@ -268,6 +268,76 @@ def flex_shot(extra=(), dur=None):
     return dict(dur=dur or tt + 0.4, draw=draw, say=say)
 
 
+def alex_card(stage=0):
+    """Alex's own moment before each launch: a pilot card with his portrait large."""
+    notes = (("Pilot, F-14 Tomcat", "Landings: all of them", "Improv shows missed: 0"),
+             ("Flight hours: plenty", "Hair: always good", "Aliens impressed: every one"),
+             ("Favorite move: the loop", "Favorite audience: any", "Curtain time: soon"),
+             ("Missions left: one", "Jokes left: many", "Still makes it look good"))[stage % 4]
+
+    def draw(screen, t):
+        screen.blit(fleet.sky((14, 26, 70), (40, 80, 150)), (0, 0))
+        for i in range(-2, 12):                                   # searchlight stripes sliding past
+            x = i * 110 + (t * 60) % 110
+            pygame.draw.polygon(screen, (30, 56, 120), [(x, BAR), (x + 50, BAR), (x - 90, SH - BAR), (x - 140, SH - BAR)])
+        slide = ease(t / 0.7)
+        mood = "flex" if 2.2 < t < 4.6 else "grin"
+        put(screen, zoom(art.portrait("alex", mood, 300), 1.15 + 0.03 * math.sin(t * 6)), int(-160 + 370 * slide), 235)
+        x0 = int(820 - 400 * slide)
+        pygame.draw.rect(screen, (250, 214, 90), (x0, 96, 360, 8))
+        hud.label(screen, "LIEUTENANT", (x0, 110), 30, (190, 210, 255), bold=True)
+        hud.label(screen, "ALEX", (x0, 136), 96, (255, 255, 255), bold=True)
+        hud.label(screen, "call sign  TWIN", (x0, 214), 30, (250, 214, 90), bold=True)
+        for i, row in enumerate(notes):
+            if t > 1.2 + i * 0.6:
+                hud.label(screen, row, (x0, 262 + i * 34), 28, (255, 255, 255))
+        if 2.2 < t < 4.6:                                         # a camera flash or two
+            for k in range(3):
+                if int(t * 7 + k * 3) % 5 == 0:
+                    fx, fy = 80 + k * 110, 120 + (k * 67) % 90
+                    pygame.draw.line(screen, (255, 255, 255), (fx - 14, fy), (fx + 14, fy), 3)
+                    pygame.draw.line(screen, (255, 255, 255), (fx, fy - 14), (fx, fy + 14), 3)
+    return dict(dur=7.5, draw=draw, say=[(2.4, "alex", "flex", lines.CARD_ALEX), (5.6, "kj", "calm", "We have a launch window, twin.")])
+
+
+def improv_show():
+    """After the war: Alex makes his curtain. A stage, a spotlight, a microphone, and KJ in the front row."""
+    def draw(screen, t):
+        screen.fill((24, 10, 16))
+        for i in range(9):                                        # the red curtain, in folds
+            x = i * 100 - 50
+            pygame.draw.rect(screen, (120, 20, 34) if i % 2 else (150, 28, 44), (x, BAR, 100, 250))
+            pygame.draw.rect(screen, (90, 14, 26), (x + 92, BAR, 8, 250))
+        pygame.draw.rect(screen, (230, 190, 80), (0, BAR, SW, 14))
+        beam = pygame.Surface((SW, SH), pygame.SRCALPHA)
+        sway = math.sin(t * 0.8) * 14
+        pygame.draw.polygon(beam, (255, 244, 200, 70), [(400 + sway * 3, BAR), (270 + sway, 330), (530 + sway, 330)])
+        screen.blit(beam, (0, 0))
+        pygame.draw.rect(screen, (86, 60, 40), (0, 318, SW, 60))                    # the boards
+        pygame.draw.rect(screen, (60, 40, 26), (0, 372, SW, 8))
+        cur = [s for s in say if s[0] <= t]
+        mood = cur[-1][2] if cur and cur[-1][1] == "alex" else "grin"
+        bounce = abs(math.sin(t * 3)) * 6 if mood == "flex" else 0
+        put(screen, art.portrait("alex", mood, 300), 400, 215 - int(bounce))
+        pygame.draw.line(screen, (40, 40, 46), (300, 330), (300, 240), 5)            # the microphone stand
+        pygame.draw.line(screen, (40, 40, 46), (300, 240), (330, 226), 5)
+        pygame.draw.circle(screen, (200, 200, 210), (334, 224), 9)
+        pygame.draw.rect(screen, (40, 40, 46), (286, 328, 28, 6))
+        for i in range(13):                                       # the audience, in silhouette
+            x = 30 + i * 62
+            bob_y = int(abs(math.sin(t * 4 + i * 1.7)) * 5) if 4.6 < t < 6.6 or t > 10.2 else 0
+            pygame.draw.circle(screen, (10, 6, 10), (x, 392 - bob_y), 22)
+            pygame.draw.rect(screen, (10, 6, 10), (x - 30, 408 - bob_y, 60, 60), border_radius=14)
+        if 4.6 < t < 6.6 or t > 10.2:                             # they laugh
+            for i in range(5):
+                u = (t * 0.9 + i * 0.37) % 1
+                hud.label(screen, "HA", (90 + i * 150, int(300 - u * 90)), 30 + (i % 2) * 10, (255, 230, 150), bold=True)
+        put(screen, art.portrait("kj", "grin" if t > 10.2 else "calm", 110), 730, 300)
+    say = [(0.5, "alex", "grin", lines.STAGE_ALEX[0]), (4.4, "alex", "flex", lines.STAGE_ALEX[1]),
+           (7.4, "kj", "calm", lines.FLEX_KJ), (10.2, "alex", "grin", lines.STAGE_ALEX[2])]
+    return dict(dur=14.0, draw=draw, say=say, caption=("That night. He made the curtain.",))
+
+
 def duo_shot(who_a, who_b, say, dur, top=(60, 130, 220), bottom=(190, 220, 250)):
     def draw(screen, t):
         cockpit(screen, t, top, bottom)
@@ -398,6 +468,7 @@ def takeoff(game, first=False):
                   [("heather", "calm", lines.SCREEN_TIME_HEATHER), ("stephen", "grin", lines.SCREEN_TIME_STEPHEN)],
                   [("alex", "calm", "One more and I can still make curtain."), ("kj", "grin", "They can hold the improv show. This is the show.")],
                   ][game.stage % 4]
+    shots.append(alex_card(game.stage))
     shots.append(flex_shot(banter))
     if first:
         def title(screen, t):
@@ -858,7 +929,7 @@ def ending(game):
     def after():
         game.win = True
         game.game_over()
-    return Scene(game, [s1, s2, flex_shot(), s4], after=after, music="as_anthem")
+    return Scene(game, [s1, s2, flex_shot(), improv_show(), s4], after=after, music="as_anthem")
 
 
 # ------------------------------------------------------------------ the landing, graded by Angry Poppa

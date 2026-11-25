@@ -296,6 +296,8 @@ class AlienStorm(Game):
         elif "b" in inp.pressed and j.loops > 0:
             j.loops -= 1
             j.loop_t = LOOP_TIME
+            if j.slot == 0 and self.rng.random() < 0.4:
+                self.say("alex", "flex", self.rng.choice(lines.LOOP_ALEX), 1.6)
             j.locks, j.hold = [], 0.0
             self.sfx("as_loop")
         # the Vulcan fires by itself whenever there is something to shoot
@@ -505,7 +507,11 @@ class AlienStorm(Game):
         if self.quip_t <= 0 and (big or self.combo in (10, 25, 40)):
             self.quip_t = 7.0
             if slot == 0:
-                self.say("kj", "grin", self.rng.choice(lines.KILL_KJ), 2.0)
+                self.alex_turn = not getattr(self, "alex_turn", False)        # Alex and KJ take turns
+                if self.alex_turn:
+                    self.say("alex", "grin", self.rng.choice(lines.KILL_ALEX), 2.2)
+                else:
+                    self.say("kj", "grin", self.rng.choice(lines.KILL_KJ), 2.0)
             else:
                 self.say("stephen", "grin", lines.OLD_MAN_STEPHEN, 2.0)
 

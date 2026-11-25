@@ -8,6 +8,13 @@ FLEX_KJ = "That's some cap, twin."                           # EXACT: KJ's answe
 
 IMPROV_ALEX = "After I save the world, I gotta go do an improv show."
 KILL_KJ = ("Nothing but net!", "Just like the team I coach!")
+# More of Alex, by request: he was not getting enough screen time.
+KILL_ALEX = ("Tell me somebody saw that.", "And... scene!", "Yes, and... another one!", "That one goes in the highlight reel.",
+             "They should be paying to watch this.")
+LOOP_ALEX = ("Watch this.", "Improv, baby.", "Hold my headset.")
+CARD_ALEX = "Is this my good side? Trick question. They are both good."
+STAGE_ALEX = ("So an alien walks onto an aircraft carrier...", "...and I said: sir, this is a no flying saucer zone.",
+              "Thank you! I am here all week. Unless there is another invasion.")
 SCREEN_TIME_HEATHER = "I hope Miles and Felix are minding their screen time."
 SCREEN_TIME_STEPHEN = "I bet they are playing Soldiers vs Spies."
 REEL_HEATHER = "I wonder if this would look good on a live reel."
