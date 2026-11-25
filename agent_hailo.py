@@ -722,6 +722,18 @@ class BotGUI:
                 print("[MUSIC] No songs in sounds/music")
                 return
             print(f"[MUSIC] Playing {track['file']}")
+            # BMO's speech player keeps the speaker open between sentences, which left the song locked out
+            # ("Speaker busy" twelve times, then silence). Let the lead-in line finish, then close it.
+            time.sleep(0.7)
+            self._kill_tts_pipeline()
+            self.is_thinking_sound_playing = False
+            if self.thinking_audio_process is not None:
+                try:
+                    self.thinking_audio_process.terminate()
+                except Exception:
+                    pass
+                self.thinking_audio_process = None
+            time.sleep(0.2)
             self._slide_index = -1
             self._slide_next = 0.0
             self._slides = music_library.slides_for(track)
