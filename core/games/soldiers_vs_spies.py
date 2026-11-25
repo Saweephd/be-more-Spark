@@ -155,8 +155,8 @@ class Soldiers(Game):
         self.build_level()
         self.phase, self.pt = "drop", 0.0
         for i, p in enumerate(self.players):
-            if p["out"]:
-                continue
+            if p["out"]:                                   # out at the end of the last mission: one more life
+                p["out"], p["lives"] = False, 1
             self.respawn(p, 40 + i * 30)
         self.banner = ("MISSION %d: %s" % (self.level + 1, LEVELS[self.level]["name"]), 3.0)
         self.sound.music("soldiers")

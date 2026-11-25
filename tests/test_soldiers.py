@@ -356,6 +356,17 @@ class PadTests(unittest.TestCase):
         canvas = pygame.Surface((common.W, common.H))
         g.draw_boss(canvas, g.cam)
 
+    def test_a_player_who_is_out_gets_one_life_at_the_next_mission(self):
+        g = sv.make(seed=1, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        g.reset()
+        g.players = [g.new_player("miles", 0), g.new_player("felix", 1)]
+        g.players[0]["lives"] = 2
+        g.players[1].update(out=True, lives=0)
+        g.level = 1
+        g.begin_level()
+        self.assertEqual([(p["out"], p["lives"]) for p in g.players], [(False, 2), (False, 1)])
+        self.assertTrue(g.players[1]["chute"])                    # he parachutes back in with everyone else
+
 
 if __name__ == "__main__":
     unittest.main()
