@@ -591,7 +591,7 @@ class Soldiers(Game):
             self.boss["hp"] = self.boss["max"] = 54
         self.boss_on = True
         self.sound.music("soldiers_boss")
-        self.banner = ("BOSS!", 2.0)
+        self.banner = ("SHOOT THE THREE RED LIGHTS!", 3.5) if kind == "bunker" else ("BOSS!", 2.0)
 
     def boss_rect(self):
         b = self.boss
@@ -599,7 +599,8 @@ class Soldiers(Game):
 
     def port_rects(self):
         r = self.boss_rect()
-        return [pygame.Rect(r.x + 12 + i * 22, r.y + 30, 16, 10) for i in range(3)]
+        # at rifle height for both heroes standing: the slits used to sit above it, so level shots hit only wall
+        return [pygame.Rect(r.x + 12 + i * 22, r.y + 40, 16, 16) for i in range(3)]
 
     def hit_boss(self, bullet):
         b = self.boss

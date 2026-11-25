@@ -279,6 +279,24 @@ class PadTests(unittest.TestCase):
             os.unlink(path)
         self.assertEqual(common.load_pad_map("/nonexistent.json"), common.DEFAULT_PAD)
 
+    def test_level_shots_reach_the_bunker_slits(self):
+        """The slits sit at rifle height, so a hero standing or running on the ground can hit them."""
+        from core.games import soldiers_art as art
+        g = sv.make(seed=1, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+        g.unlocked, g.level_choice = 5, 3
+        inp = common.Input()
+        inp.down("a"); g.step(1 / 60, inp); inp.end_frame(); inp.up("a")
+        g.level = next(i for i, lv in enumerate(sv.LEVELS) if lv["boss"] == "bunker")
+        g.start_boss()
+        port = g.port_rects()[0]
+        for who in ("miles", "felix"):
+            for pose in ("stand", "run0", "run1"):
+                _, height = art.muzzle_offset(who, pose, "fwd", 1)
+                self.assertTrue(port.top <= sv.GROUND - height < port.bottom, (who, pose))
+        before = g.boss["hp"]
+        self.assertTrue(g.hit_boss({"x": port.centerx, "y": sv.GROUND - 22}))
+        self.assertEqual(g.boss["hp"], before - 1)
+
 
 if __name__ == "__main__":
     unittest.main()
