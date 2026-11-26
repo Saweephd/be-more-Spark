@@ -27,6 +27,8 @@ def font(size):
     f = _fonts.get(size)
     if f is None:
         f = _fonts[size] = pygame.font.Font(None, size)
+        from . import common
+        common.FONT_SIZES[id(f)] = size                # lets outlined words be drawn sharp at full size
     return f
 
 
@@ -506,7 +508,8 @@ def bubble(surf, msg, x, y):
     pygame.draw.rect(surf, (250, 250, 246), r, border_radius=5)
     pygame.draw.polygon(surf, (250, 250, 246), [(r.centerx - 4, r.bottom - 1), (r.centerx + 4, r.bottom - 1),
                                                 (r.centerx, r.bottom + 5)])
-    surf.blit(img, (r.x + 5, r.y + 3))
+    from . import common
+    common.text(surf, msg, (r.x + 5, r.y + 3), 15, (20, 20, 30), shadow=False)      # sharp when the game asks
 
 
 # ------------------------------------------------------------------ portraits

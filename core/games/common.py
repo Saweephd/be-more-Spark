@@ -202,6 +202,14 @@ def sharp_add(msg, pos, size, color, center=False, edge=None, shadow=False):
     SHARP["queue"].append((str(msg), pos, size, color, center, edge, shadow))
 
 
+def sharp_shade(surf, alpha):
+    """A dark veil has just been laid over the canvas: darken the words held back so far to match."""
+    if sharp(surf):
+        k = 1.0 - alpha / 255.0
+        SHARP["queue"] = [(m, pos, size, tuple(int(v * k) for v in col[:3]), ctr, edge, shadow)
+                          for m, pos, size, col, ctr, edge, shadow in SHARP["queue"]]
+
+
 def sharp_flush(screen):
     """Draw the held-back words on the full-size screen at twice the size, with smooth edges."""
     for msg, (x, y), size, color, center, edge, shadow in SHARP["queue"]:
@@ -278,6 +286,8 @@ class Game:
     title_color = YELLOW
     music = None            # name of this game's tune in sound.TUNES
     sound = _sound.Silent()  # run() swaps in the real player
+    sharp_text = True       # lettering is drawn at full size with smooth edges, not small and doubled
+    smooth_pixels = True    # and the small picture is doubled with its stair-steps smoothed off
     levels = ()             # level names: the title screen lets you start at any level reached
     modes = ()              # play modes chosen on the title screen, for example ("Relax", "Challenge")
 
@@ -392,6 +402,7 @@ class Game:
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 120))
             surf.blit(shade, (0, 0))
+            sharp_shade(surf, 150)
             text(surf, self.title, (W // 2, 44), 44, self.title_color, center=True)
             y = 104
             for line in self.help_lines:
@@ -418,6 +429,7 @@ class Game:
             shade = pygame.Surface((W, H), pygame.SRCALPHA)
             shade.fill((0, 0, 0, 140))
             surf.blit(shade, (0, 0))
+            sharp_shade(surf, 160)
             if getattr(self, "win", False):
                 text(surf, "YOU WIN!", (W // 2, 60), 44, YELLOW, center=True)
             else:
@@ -547,7 +559,10 @@ def run(game, screen=None, max_frames=None):
             else:
                 pygame.transform.scale(canvas, screen.get_size(), screen)
         if SHARP["canvas"] is not None:
-            sharp_flush(screen)
+            if getattr(game, "hd_only", False):
+                SHARP["queue"] = []                   # the small canvas was not shown, so neither are its words
+            else:
+                sharp_flush(screen)
             SHARP["canvas"] = None
         hd = getattr(game, "render_hd", None)        # sharp full resolution extras, drawn over the doubled picture
         if hd is not None:

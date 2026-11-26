@@ -210,7 +210,7 @@ def bubble(surf, msg, x, y, size=16):
     pygame.draw.rect(surf, (255, 255, 255), (x, y, w, h), border_radius=5)
     pygame.draw.rect(surf, c.INK, (x, y, w, h), 1, border_radius=5)
     pygame.draw.polygon(surf, (255, 255, 255), [(x + 10, y + h - 1), (x + 18, y + h - 1), (x + 8, y + h + 6)])
-    surf.blit(img, (x + 5, y + 3))
+    text(surf, msg, (x + 5, y + 3), size, c.INK, shadow=False)                      # sharp when the game asks
 
 
 # ---------- voices ----------

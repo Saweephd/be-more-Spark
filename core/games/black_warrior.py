@@ -1716,7 +1716,7 @@ class BlackWarrior(Game):
                 cur = (cur + " " + w_).strip()
         lines.append(cur)
         for i, ln in enumerate(lines[:3]):
-            surf.blit(art.font(16).render(ln, False, (240, 240, 250)), (94, 176 + i * 15))
+            c.text(surf, ln, (94, 176 + i * 15), 16, (240, 240, 250), shadow=False)
         if self.pt * 45 >= len(line) and int(self.time * 2) % 2 == 0:
             pygame.draw.polygon(surf, (255, 220, 80), [(380, 222), (388, 222), (384, 228)])
 

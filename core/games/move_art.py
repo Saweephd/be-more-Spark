@@ -279,7 +279,8 @@ def bubble(surf, msg, cx, cy):
     r.clamp_ip(surf.get_rect().inflate(-4, -4))
     pygame.draw.rect(surf, (255, 255, 255), r, border_radius=5)
     pygame.draw.rect(surf, (30, 30, 40), r, 1, border_radius=5)
-    surf.blit(im, im.get_rect(center=r.center))
+    from . import common
+    common.text(surf, msg, im.get_rect(center=r.center).topleft, 15, (30, 30, 40), shadow=False)    # sharp when asked
 
 
 def rose_head():
