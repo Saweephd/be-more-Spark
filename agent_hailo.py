@@ -261,6 +261,7 @@ class BotGUI:
         threading.Thread(target=self.screensaver_audio_loop, daemon=True).start()
         threading.Thread(target=self._keep_model_warm_loop, daemon=True).start()
         threading.Thread(target=self._battery_loop, daemon=True).start()
+        threading.Thread(target=self._blackbox_loop, daemon=True).start()
         threading.Thread(target=self._tv_stream_ready, daemon=True).start()
 
         # Pre-warm the VLM (Hailo NPU) so the first "what is this?" doesn't
@@ -900,6 +901,23 @@ class BotGUI:
 
     # ── Spoken shutdown ───────────────────────────────────────────────────────
     # ── Battery ───────────────────────────────────────────────────────────────
+    def _blackbox_loop(self):
+        """Every 20 seconds: one line of vital signs to a file that survives a crash (core/blackbox.py)."""
+        from core import blackbox, tvmode
+        blackbox.write("---- BMO started ---- " + blackbox.vitals())
+        while not self.stop_event.wait(20):
+            try:
+                game = "yes" if self._game_proc is not None else ""
+                try:
+                    st = battery.read()
+                    batt = "%s%%/%sV" % (st.get("percent"), st.get("volts"))
+                except Exception:
+                    batt = ""
+                tv = ("on" if tvmode.on() else "off") + ("+connected" if tvmode.connected() else "")
+                blackbox.write(blackbox.line(str(self.current_state), game, batt, tv))
+            except Exception as e:
+                print(f"[BLACKBOX] {e}")
+
     def _battery_loop(self):
         """Every 30 seconds: read the battery, warn when low, shut down cleanly when nearly empty."""
         if not os.path.exists(battery.BUS):
