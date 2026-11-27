@@ -982,6 +982,21 @@ class BotGUI:
                 self.master.after(delay, self._full_screen_again)
             except Exception:
                 pass
+        try:
+            self.master.after(20000, self._face_watch)
+        except Exception:
+            pass
+
+    def _face_watch(self):
+        """Every 10 seconds: if BMO's face has slid onto the TV's screen (it sits to the right of BMO's own,
+        so the face then shows on the TV and BMO's screen goes blank), put it back on BMO."""
+        try:
+            if self.master.winfo_rootx() >= 400 or self.master.winfo_width() < 780:
+                print(f"[TV] face found at x={self.master.winfo_rootx()}, moving it back to BMO's screen")
+                self._full_screen_again()
+        except Exception as e:
+            print(f"[TV] face check failed: {e}")
+        self.master.after(10000, self._face_watch)
 
     def _full_screen_again(self):
         try:
