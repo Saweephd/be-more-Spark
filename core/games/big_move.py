@@ -60,6 +60,7 @@ HECKLES = (
 
 class BigMove(Game):
     name = "big_move"
+    players_max = 2         # the second controller is player two, not a copy of player one
     title = "The Big Move"
     music = "big_move"
     title_color = (250, 220, 90)

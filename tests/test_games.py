@@ -408,5 +408,20 @@ class GameTests(unittest.TestCase):
         self.assertFalse(res["played"])
 
 
+class TestSecondController(unittest.TestCase):
+    def test_every_two_player_game_says_so(self):
+        """The second controller only becomes player two in a game that declares players_max = 2;
+        otherwise it quietly drives player one."""
+        import inspect
+        from core.games import GAMES
+        for name in GAMES:
+            mod = __import__("core.games." + name, fromlist=["make"])
+            src = inspect.getsource(mod) if not hasattr(mod, "__path__") else ""
+            game = mod.make(seed=1, scores_path=os.path.join(tempfile.mkdtemp(), "s.json"))
+            code = src + inspect.getsource(type(game))
+            if "p2" in code:
+                self.assertEqual(getattr(game, "players_max", 1), 2, name)
+
+
 if __name__ == "__main__":
     unittest.main()

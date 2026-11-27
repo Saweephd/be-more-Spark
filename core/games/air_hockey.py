@@ -46,6 +46,7 @@ def scale_at(y):
 
 class AirHockey(Game):
     name = "air_hockey"
+    players_max = 2         # the second controller is player two, not a copy of player one
     title = "Air Hockey"
     music = "air_hockey"
     title_color = (120, 200, 255)
